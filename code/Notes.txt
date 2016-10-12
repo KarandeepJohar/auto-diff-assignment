@@ -1,0 +1,30 @@
+MANIFEST:
+ - xman.py: core routines to generate wengert lists from python-readable expressions
+ - scalar-opt.py: simple gradient-based optimization built on xman
+
+TODO:
+  f.param(default=...) ?
+
+EXAMPLE:
+
+  class MLP(ANN):
+    input = f.input()
+    input2hidden = f.param()
+    bias1 = f.param()
+    hidden2output = f.param()
+    bias2 = f.param()
+    hidden = f.tanh(input*input2hidden + bias1)
+    output = f.tanh(hidden*hidden2output + bias2)
+
+HOW IT WORKS:
+
+Internally we build an expression graph, made up of Registers and
+Operations.  Registers are like variables; operations are like
+function calls.
+
+Each register is either an Input, a Parameter, or an OperationOutput.
+If reg is an OperationOutput, then the field reg.definedAs points to
+the operation which defines reg.  
+
+
+

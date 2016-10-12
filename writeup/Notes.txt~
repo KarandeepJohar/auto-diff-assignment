@@ -1,0 +1,13 @@
+Some online resources:
+
+https://justindomke.wordpress.com/2009/03/24/a-simple-explanation-of-reverse-mode-automatic-differentiation/ - blog post, very clear, not much detail
+
+http://colah.github.io/posts/2015-08-Backprop/ - another nice blog post
+
+http://homes.cs.washington.edu/~naveenks/files/2009_Cranfield_PPT.pdf - ok slide deck
+
+http://www.bcl.hamilton.ie/~barak/papers/toplas-reverse.pdf - clearest paper I found so far
+
+https://github.com/HIPS/autograd - similar project
+
+http://arxiv.org/pdf/1502.05767v2.pdf - survey paper
