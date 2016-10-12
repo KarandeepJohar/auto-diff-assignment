@@ -7,8 +7,8 @@ from xman import *
 import struct
 
 
-TRACE_EVAL = True
-TRACE_BP = True
+TRACE_EVAL = False
+TRACE_BP = False
 
 # some useful functions
 
@@ -257,43 +257,59 @@ def error(y_hat,y):
     return float(np.sum(np.argmax(y_hat,axis=1) != 
                         np.argmax(y,axis=1)))/y.shape[0]
 
-if __name__ == "__main__":
-
-    # generate random training data labeled with dot product with random weights,
-    # weights and features scaled to +1 -1
-    epochs = 10
-    def generateData(numExamples,numDims):
-        def scaleToPlusOneMinusOne(m):
-            return (m - 0.5) * 2.0
-        x = scaleToPlusOneMinusOne( np.random.rand(numExamples,numDims) )
-        targetWeights = scaleToPlusOneMinusOne( np.random.rand(numDims,1) )
-        px = np.dot(x,targetWeights)
-        return x,targetWeights,px
+def MNIST():
+    h = MLP2()
+    ad = Autograd(h)
+    X_train = parse_images("train-images.idx3-ubyte")
+    y_train = parse_labels("train-labels.idx1-ubyte")
+    X_test = parse_images("t10k-images.idx3-ubyte")#[:1000,:]
+    y_test = parse_labels("t10k-labels.idx1-ubyte")#[:1000,:]
     
-    x,targetWeights,px = generateData(10000,784)
+    W1 =0.1*np.random.rand(X_train.shape[1],200)
+    b1=0.1*np.random.rand(200)
+    W2=0.1*np.random.rand(200,100)
+    b2=0.1*np.random.rand(100)
+    W3=0.1*np.random.rand(100,y_train.shape[1])
+    b3=0.1*np.random.rand(y_train.shape[1])
 
-    # simple gradient optimizer
-    def learn(claz,epochs=epochs, rate=1.0, **initDict):
-        def dvals(d,keys):
-            return " ".join(map(lambda k:'%s=%g' % (k,d[k]), keys.split()))
-        h = claz()
-        ad = Autograd(h)
-        dataParamDict = h.inputDict(**initDict)
-        opseq = h.operationSequence(h.loss)
-        for i in range(epochs):
-            vd = ad.eval(opseq,dataParamDict)
-            print 'epoch:',i+1,dvals(vd,'loss'), error(vd['y'], vd['output']) 
-            if vd['loss'] < 0.001:
-                print 'good enough'
-                break
-            gd = ad.bprop(opseq,vd,loss=np.float_(1.0))
-            for rname in gd:
-                if h.isParam(rname):
-                    if gd[rname].shape!=dataParamDict[rname].shape:
-                        print rname, gd[rname].shape, dataParamDict[rname].shape
-                    dataParamDict[rname] = dataParamDict[rname] - rate*gd[rname]
-        return dataParamDict
-    """h = LinearRegression()
+    fwd = learn(MLP2, epochs=1, input=X_train, rate=0.01, 
+            W1=W1,
+            b1=b1,
+            W2=W2,
+            b2=b2,
+            W3=W3,
+            b3=b3,
+            y=y_train)
+    # print "kkkkkkkkkkkkkkkkkk"
+    print X_test.shape, fwd['W1'].shape, fwd['b1'].shape, fwd['b1']
+    print fwd['W2'].shape, fwd['b2'].shape
+    print fwd['W3'].shape, fwd['b3'].shape 
+    fpd = ad.eval(h.operationSequence(h.output), 
+            h.inputDict(input=X_test, W1=fwd['W1'], b1=fwd['b1'], W2=fwd['W2'], b2=fwd['b2'],W3=fwd['W3'], b3=fwd['b3']))
+
+def learn(claz,epochs=10, rate=1.0, **initDict):
+    def dvals(d,keys):
+        return " ".join(map(lambda k:'%s=%g' % (k,d[k]), keys.split()))
+    h = claz()
+    ad = Autograd(h)
+    dataParamDict = h.inputDict(**initDict)
+    opseq = h.operationSequence(h.loss)
+    for i in range(epochs):
+        vd = ad.eval(opseq,dataParamDict)
+        print 'epoch:',i+1,dvals(vd,'loss'), error(vd['y'], vd['output']) 
+        if vd['loss'] < 0.001:
+            print 'good enough'
+            break
+        gd = ad.bprop(opseq,vd,loss=np.float_(1.0))
+        for rname in gd:
+            if h.isParam(rname):
+                if gd[rname].shape!=dataParamDict[rname].shape:
+                    print rname, gd[rname].shape, dataParamDict[rname].shape
+                dataParamDict[rname] = dataParamDict[rname] - rate*gd[rname]
+    return dataParamDict
+
+def linearRegressionCode(x, targetWeights, px):
+    h = LinearRegression()
     ad = Autograd(h)                
     nullWeights = np.zeros(targetWeights.shape)
     print 'clean training data, linear regression'
@@ -307,14 +323,8 @@ if __name__ == "__main__":
     fd = learn(LinearRegression, epochs, rate=1.0, input=x, weights=nullWeights, y=noisyPx)
     print 'learned/target weights:'
     print np.hstack([fd['weights'], targetWeights])
-    
-    # now produce data for logistic regression
-    def sigma(x): return np.reciprocal( np.exp(-x) + 1.0 )
-    y0 = sigma(px)
-    y1 = ss.threshold(y0, 0.5, 1.0, 0.0)  # < 0.5 => 0
-    y2 = ss.threshold(y1, 0.0, 0.5, 1.0)   # > 0.5 => 1
-    y = np.hstack([y2, 1-y2])
-    
+
+def LRCode(x,y, nullWeights):
     h = LogisticRegression()
     ad = Autograd(h)
 
@@ -323,14 +333,13 @@ if __name__ == "__main__":
     print 'learned/target predictions, logistic regression'
     print np.hstack([fpd['output'], y])
 
-    #bhuwan's code
-
+def bhuwanMLP(x,y):
     h = MLP()
     ad = Autograd(h)
-    W1 = np.random.rand(784,5)
+    W1 = np.random.rand(x.shape[1],5)
     b1=np.random.rand(5)
-    W2=np.random.rand(5,2)
-    b2=np.random.rand(2)
+    W2=np.random.rand(5,y.shape[1])
+    b2=np.random.rand(y.shape[1])
 
     print np.vstack([W1, b1])
     print np.vstack([W2, b2])
@@ -348,75 +357,43 @@ if __name__ == "__main__":
     print np.hstack([fpd['output'], y])
     print 'learned weights, biases'
     print np.vstack([fpd['W1'], fpd['b1']])
-    print np.vstack([fpd['W2'], fpd['b2']])"""
+    print np.vstack([fpd['W2'], fpd['b2']])
+if __name__ == "__main__":
 
-
-
-    print "kkkkkkkkkkkkkkkkkk"
-    # karan
+    # generate random training data labeled with dot product with random weights,
+    # weights and features scaled to +1 -1
+    def generateData(numExamples,numDims):
+        def scaleToPlusOneMinusOne(m):
+            return (m - 0.5) * 2.0
+        x = scaleToPlusOneMinusOne( np.random.rand(numExamples,numDims) )
+        targetWeights = scaleToPlusOneMinusOne( np.random.rand(numDims,1) )
+        px = np.dot(x,targetWeights)
+        return x,targetWeights,px
     
-    h = MLP2()
-    ad = Autograd(h)
-    X_train = parse_images("train-images.idx3-ubyte")
-    y_train = parse_labels("train-labels.idx1-ubyte")
-    X_test = parse_images("t10k-images.idx3-ubyte")#[:1000,:]
-    y_test = parse_labels("t10k-labels.idx1-ubyte")#[:1000,:]
-    # print X_test.shape
+    x,targetWeights,px = generateData(10000,784)
+    nullWeights = np.zeros(targetWeights.shape)
 
 
-    # X_test = np.hstack([np.sum(y_test[:, :394], axis = 1, keepdims=True), np.sum(y_test[:, 394:], axis = 1, keepdims=True)])
-    # y_test = np.hstack([np.sum(y_test[:, :5], axis = 1, keepdims=True), np.sum(y_test[:, 5:], axis = 1, keepdims=True)])
-    # print "y_test", y_test.shape, y_test
-    # print "x_test", X_test.shape
-    # print np.sum(X_test, axis=1), X_test
-    #nullWeights = np.zeros((X_test.shape[1], y_test.shape[1]))
-    #fwd = learn(LogisticRegression, epochs=50, input=X_test, rate=0.000005, weights=nullWeights, y=y_test)
-    # fwd = learn(MLP, epochs=10, input=X_test, rate=0.001, 
-    #         W1=np.zeros((784,200)),
-    #         b1=np.zeros((200)),
-    #         W2=np.zeros((200,10)),
-    #         b2=np.zeros((10)),
-    #         y=y_test)
-    # fwd = learn(MLP, epochs=10, input=X_test, rate=0.05, 
-    #        W1=np.random.rand(784,100),
-    #        b1=np.random.rand(100),
-    #        W2=np.random.rand(100,2),
-    #        b2=np.random.rand(2),
-    #        # W3=np.random.rand(100,10),
-    #        # b3=np.random.rand(10),
-    #        y=y_test)
-    W1 =0.1*np.random.rand(784,200)
-    b1=0.1*np.random.rand(200)
-    W2=0.1*np.random.rand(200,100)
-    b2=0.1*np.random.rand(100)
-    W3=0.1*np.random.rand(100,10)
-    b3=0.1*np.random.rand(10)
-    # W1 =np.zeros((784,200))
-    # b1=np.zeros((200))
-    # W2=np.zeros((200,100))
-    # b2=np.zeros((100))
-    # W3=np.zeros((100,10))
-    # b3=np.zeros((10))
-    # print np.vstack([W1, b1])
-    # print np.vstack([W2, b2])
-    fwd = learn(MLP2, epochs=1, input=X_train, rate=0.01, 
-            W1=W1,
-            b1=b1,
-            W2=W2,
-            b2=b2,
-            W3=W3,
-            b3=b3,
-            y=y_train)
-    # print "kkkkkkkkkkkkkkkkkk"
-    print X_test.shape, fwd['W1'].shape, fwd['b1'].shape, fwd['b1']
-    print fwd['W2'].shape, fwd['b2'].shape
-    print fwd['W3'].shape, fwd['b3'].shape 
-    fpd = ad.eval(h.operationSequence(h.output), 
-            h.inputDict(input=X_test, W1=fwd['W1'], b1=fwd['b1'], W2=fwd['W2'], b2=fwd['b2'],W3=fwd['W3'], b3=fwd['b3']))
-    # print 'learned/target predictions, MLP'
-    # print np.hstack([fpd['output'], y_test])
-    # print 'learned weights, biases'
-    # print np.vstack([fwd['W1'], fwd['b1']])
-    # print np.vstack([fwd['W2'], fwd['b2']])
+    
+    
+    # now produce data for logistic regression
+    def sigma(x): return np.reciprocal( np.exp(-x) + 1.0 )
+    y0 = sigma(px)
+    y1 = ss.threshold(y0, 0.5, 1.0, 0.0)  # < 0.5 => 0
+    y2 = ss.threshold(y1, 0.0, 0.5, 1.0)   # > 0.5 => 1
+    y = np.hstack([y2, 1-y2])
+    
+    
+    LRCode(x, y, nullWeights)
+    #bhuwan's code
+    linearRegressionCode(x, targetWeights, px)
+    bhuwanMLP(x,y)
+
+    MNIST()
+
+
+
+
+    
 
     
