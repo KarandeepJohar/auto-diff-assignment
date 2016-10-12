@@ -310,6 +310,7 @@ def learn(claz,epochs=10, rate=1.0, **initDict):
 
 def linearRegressionCode(x, targetWeights, px):
     h = LinearRegression()
+    epochs =10
     ad = Autograd(h)                
     nullWeights = np.zeros(targetWeights.shape)
     print 'clean training data, linear regression'
