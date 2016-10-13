@@ -2,8 +2,10 @@
 Implement baselines for character level classification of DBPedia entities.
 The implementation uses lasagne and theano. Current models include:
     - MLP
+    - LSTM
 """
 
+import argparse
 import io
 import numpy as np
 import theano
@@ -144,7 +146,7 @@ class MLP:
         for jj,item in enumerate(index):
             for ii,idx in enumerate(item):
                 if idx==0: continue
-                out[jj,(ii-1)*self.num_chars+idx] = 1
+                out[jj,ii*self.num_chars+idx] = 1
         return out
 
     def train(self, e, l):
@@ -161,15 +163,119 @@ class MLP:
         p = L.get_output(l_out)
         return p, l_out
 
+class LSTM:
+    def __init__(self, num_chars, max_len, batch_size, num_labels, learning_rate):
+        self.num_chars = num_chars
+        self.max_len = max_len
+        self.in_size = num_chars
+        self.batch_size = batch_size
+        self.num_labels = num_labels
+
+        # build network
+        ent_var = T.wtensor3('ent')
+        lab_var = T.imatrix('lab')
+        self.inps = [ent_var, lab_var]
+        probs, network = self.build_network()
+        params = L.get_all_params(network, trainable=True)
+
+        # loss
+        loss = (lasagne.objectives.categorical_crossentropy(probs, lab_var)).mean()
+        updates = lasagne.updates.sgd(loss, params, learning_rate)
+        acc = (lasagne.objectives.categorical_accuracy(probs, lab_var)).mean()
+
+        # functions
+        self.train_fn = theano.function(self.inps, [loss,acc], updates=updates)
+        self.validate_fn = theano.function(self.inps, [loss,acc])
+
+    def to1hot(self, index):
+        # convert list of indices to one-hot representation
+        out = np.zeros((index.shape[0],index.shape[1],self.num_chars), dtype='int16')
+        for jj,item in enumerate(index):
+            for ii,idx in enumerate(item):
+                if idx==0: continue
+                out[jj,ii,idx] = 1
+        return out
+
+    def train(self, e, l):
+        return self.train_fn(self.to1hot(e), l)
+
+    def validate(self, e, l):
+        return self.validate_fn(self.to1hot(e), l)
+
+    def build_network(self):
+        l_in = L.InputLayer(shape=(self.batch_size, self.max_len, self.in_size), 
+                input_var=self.inps[0])
+        l_1 = L.LSTMLayer(l_in, 50, backwards=False,
+                only_return_final=True) # B x 100
+        l_out = L.DenseLayer(l_1, self.num_labels, nonlinearity=lasagne.nonlinearities.softmax)
+        p = L.get_output(l_out)
+        return p, l_out
+
+class BiLSTM:
+    def __init__(self, num_chars, max_len, batch_size, num_labels, learning_rate):
+        self.num_chars = num_chars
+        self.max_len = max_len
+        self.in_size = num_chars
+        self.batch_size = batch_size
+        self.num_labels = num_labels
+
+        # build network
+        ent_var = T.wtensor3('ent')
+        lab_var = T.imatrix('lab')
+        self.inps = [ent_var, lab_var]
+        probs, network = self.build_network()
+        params = L.get_all_params(network, trainable=True)
+
+        # loss
+        loss = (lasagne.objectives.categorical_crossentropy(probs, lab_var)).mean()
+        updates = lasagne.updates.sgd(loss, params, learning_rate)
+        acc = (lasagne.objectives.categorical_accuracy(probs, lab_var)).mean()
+
+        # functions
+        self.train_fn = theano.function(self.inps, [loss,acc], updates=updates)
+        self.validate_fn = theano.function(self.inps, [loss,acc])
+
+    def to1hot(self, index):
+        # convert list of indices to one-hot representation
+        out = np.zeros((index.shape[0],index.shape[1],self.num_chars), dtype='int16')
+        for jj,item in enumerate(index):
+            for ii,idx in enumerate(item):
+                if idx==0: continue
+                out[jj,ii,idx] = 1
+        return out
+
+    def train(self, e, l):
+        return self.train_fn(self.to1hot(e), l)
+
+    def validate(self, e, l):
+        return self.validate_fn(self.to1hot(e), l)
+
+    def build_network(self):
+        l_in = L.InputLayer(shape=(self.batch_size, self.max_len, self.in_size), 
+                input_var=self.inps[0])
+        l_1 = L.LSTMLayer(l_in, 50, backwards=False,
+                only_return_final=True) # B x 100
+        l_2 = L.LSTMLayer(l_in, 50, backwards=True,
+                only_return_final=True) # B x 100
+        l_h = L.ConcatLayer([l_1,l_2])
+        l_out = L.DenseLayer(l_h, self.num_labels, nonlinearity=lasagne.nonlinearities.softmax)
+        p = L.get_output(l_out)
+        return p, l_out
+
 if __name__=='__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', dest='model', type=str, 
+            default='MLP', help='Model to use')
+    params = vars(parser.parse_args())
+
     dp = DataPreprocessor()
     data = dp.preprocess('../data/small.train','../data/small.test')
     mb_train = MinibatchLoader(data.training, 10, 10, len(data.labeldict))
     mb_test = MinibatchLoader(data.test, 10, 10, len(data.labeldict))
 
-    m = MLP(len(data.chardict), 10, 10, len(data.labeldict), 0.01)
+    m = eval(params['model'])(len(data.chardict), 10, 10, len(data.labeldict), 0.01)
 
-    logger = open('../logs/mlp_log.txt','w')
+    logger = open('../logs/%s_log.txt' % params['model'].lower(),'w')
     for epoch in range(20):
         print 'epoch ', epoch
         for (e,l) in mb_train:
