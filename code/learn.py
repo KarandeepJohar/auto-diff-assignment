@@ -51,7 +51,7 @@ def _softMax(x):
 def _crossEnt(x,y):
     EPSILON = 10e-5
     log_x = np.log(x + EPSILON)
-    return - np.multiply(y,log_x)
+    return - np.multiply(y,log_x).sum(axis=1, keepdims=True)
 
 EVAL_FUNS = {
     'add':      lambda x1,x2: x1+x2,
@@ -91,7 +91,7 @@ BP_FUNS = {
     'mul':              [_derivDot1, _derivDot2],
     'mean':             [lambda delta,out,x : delta * 1.0/float(x.shape[0])*np.ones(x.shape)],
     'square':           [lambda delta,out,x : delta * 2.0 * x],
-    'crossEnt-softMax': [lambda delta,out,x,y: delta*(_softMax(x) - y),  lambda delta,out,x,y:-delta*x*y],  #second one is never used for much
+    'crossEnt-softMax': [lambda delta,out,x,y: delta*(_softMax(x)*y.sum(axis=1)[:,None] - y),  lambda delta,out,x,y:-delta*x*y],  #second one is never used for much
     'tanh':             [lambda delta,out,x : delta * (1.0 - np.square(out))],
     'relu':             [lambda delta,out,x : delta * ((x>0).astype(np.float64))],
     }
@@ -184,7 +184,7 @@ def MLP():
     x.o1 = f.tanh( f.mul(x.input,x.W1) + x.b1 )
     x.W2 = f.param()
     x.b2 = f.param()
-    x.o2 = f.tanh( f.mul(x.o1,x.W2) + x.b2 )
+    x.o2 = f.relu( f.mul(x.o1,x.W2) + x.b2 )
     x.output = f.softMax(x.o2)
     # loss
     x.y = f.input()
@@ -346,7 +346,7 @@ def bhuwanMLP(x,y):
     print np.vstack([W2, b2])
 
 
-    fwd = learn(MLP, epochs=100, input=x, rate=0.01, 
+    fwd = learn(MLP, epochs=2000, input=x, rate=10., 
             W1=W1,
             b1=b1,
             W2=W2,
@@ -371,7 +371,7 @@ if __name__ == "__main__":
         px = np.dot(x,targetWeights)
         return x,targetWeights,px
     
-    x,targetWeights,px = generateData(10000,784)
+    x,targetWeights,px = generateData(10000,2)
     nullWeights = np.zeros(targetWeights.shape)
 
 
@@ -385,12 +385,12 @@ if __name__ == "__main__":
     y = np.hstack([y2, 1-y2])
     
     
-    LRCode(x, y, nullWeights)
+    #LRCode(x, y, nullWeights)
     #bhuwan's code
-    linearRegressionCode(x, targetWeights, px)
+    #linearRegressionCode(x, targetWeights, px)
     bhuwanMLP(x,y)
 
-    MNIST()
+    #MNIST()
 
 
 
