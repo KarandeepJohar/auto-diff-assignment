@@ -5,6 +5,7 @@ The implementation uses lasagne and theano. Current models include:
     - LSTM
 """
 
+import time
 import argparse
 import io
 import numpy as np
@@ -206,8 +207,10 @@ class LSTM:
         l_in = L.InputLayer(shape=(self.batch_size, self.max_len, self.in_size), 
                 input_var=self.inps[0])
         l_1 = L.LSTMLayer(l_in, 50, backwards=False,
-                only_return_final=True) # B x 100
-        l_out = L.DenseLayer(l_1, self.num_labels, nonlinearity=lasagne.nonlinearities.softmax)
+                only_return_final=False) # B x N x 50
+        l_2 = L.DenseLayer(l_1, 100) # flattens N x D --> ND
+        l_out = L.DenseLayer(l_1, self.num_labels, 
+                nonlinearity=lasagne.nonlinearities.softmax)
         p = L.get_output(l_out)
         return p, l_out
 
@@ -266,6 +269,8 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', dest='model', type=str, 
             default='MLP', help='Model to use')
+    parser.add_argument('--learning_rate', dest='lr', type=float, 
+            default=0.01, help='Learning rate')
     params = vars(parser.parse_args())
 
     dp = DataPreprocessor()
@@ -273,10 +278,12 @@ if __name__=='__main__':
     mb_train = MinibatchLoader(data.training, 10, 10, len(data.labeldict))
     mb_test = MinibatchLoader(data.test, 10, 10, len(data.labeldict))
 
-    m = eval(params['model'])(len(data.chardict), 10, 10, len(data.labeldict), 0.01)
+    m = eval(params['model'])(len(data.chardict), 10, 10, len(data.labeldict), params['lr'])
 
-    logger = open('../logs/%s_log.txt' % params['model'].lower(),'w')
-    for epoch in range(20):
+    logger = open('../logs/%s_%.3f_log.txt' % (params['model'].lower(),params['lr']),'w')
+    max_acc = 0.
+    tst = time.time()
+    for epoch in range(100):
         print 'epoch ', epoch
         for (e,l) in mb_train:
             tr_loss, tr_acc = m.train(e,l)
@@ -291,7 +298,10 @@ if __name__=='__main__':
             tot_loss += loss
             tot_acc += acc
             n += 1
-        message = 'VAL loss = %.3f acc = %.3f' % (tot_loss/n, tot_acc/n)
+        acc = tot_acc/n
+        if acc>max_acc: max_acc = acc
+        message = 'VAL loss = %.3f acc = %.3f max_acc = %.3f' % (tot_loss/n, acc, max_acc)
         logger.write(message + '\n')
         print message
+    logger.write('Time elapsed = %.2f\n' % (time.time()-tst))
     logger.close()
