@@ -85,9 +85,17 @@ def _derivDot1(delta,out,x1,x2):
 def _derivDot2(delta,out,x1,x2):
     return np.dot(x1.transpose(), delta)
 
+def _derivAdd(delta,x1):
+    if delta.shape!=x1.shape:
+        # broadcast, sum along axis=0
+        if delta.shape[1]!=x1.shape[0]:
+            raise ValueError("Dimension Mismatch")
+        return delta.sum(axis=0)
+    else: return delta
+
 BP_FUNS = {
-    'add':              [lambda delta,out,x1,x2: delta,    lambda delta,out,x1,x2: delta],
-    'subtract':         [lambda delta,out,x1,x2: delta,    lambda delta,out,x1,x2: -delta],
+    'add':              [lambda delta,out,x1,x2: _derivAdd(delta,x1),    lambda delta,out,x1,x2: _derivAdd(delta,x2)],
+    'subtract':         [lambda delta,out,x1,x2: _derivAdd(delta,x1),    lambda delta,out,x1,x2: -_derivAdd(delta,x2)],
     'mul':              [_derivDot1, _derivDot2],
     'mean':             [lambda delta,out,x : delta * 1.0/float(x.shape[0])*np.ones(x.shape)],
     'square':           [lambda delta,out,x : delta * 2.0 * x],
@@ -184,7 +192,7 @@ def MLP():
     x.o1 = f.tanh( f.mul(x.input,x.W1) + x.b1 )
     x.W2 = f.param()
     x.b2 = f.param()
-    x.o2 = f.relu( f.mul(x.o1,x.W2) + x.b2 )
+    x.o2 = f.tanh( f.mul(x.o1,x.W2) + x.b2 )
     x.output = f.softMax(x.o2)
     # loss
     x.y = f.input()
@@ -346,7 +354,7 @@ def bhuwanMLP(x,y):
     print np.vstack([W2, b2])
 
 
-    fwd = learn(MLP, epochs=2000, input=x, rate=10., 
+    fwd = learn(MLP, epochs=2000, input=x, rate=1, 
             W1=W1,
             b1=b1,
             W2=W2,
@@ -359,6 +367,9 @@ def bhuwanMLP(x,y):
     print 'learned weights, biases'
     print np.vstack([fpd['W1'], fpd['b1']])
     print np.vstack([fpd['W2'], fpd['b2']])
+    print fpd['W1'].shape, fpd['b1'].shape
+    print fpd['W2'].shape, fpd['b2'].shape
+
 if __name__ == "__main__":
 
     # generate random training data labeled with dot product with random weights,

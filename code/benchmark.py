@@ -3,6 +3,7 @@ Implement baselines for character level classification of DBPedia entities.
 The implementation uses lasagne and theano. Current models include:
     - MLP
     - LSTM
+    - BiLSTM
 """
 
 import time
@@ -139,7 +140,7 @@ class MLP:
 
         # functions
         self.train_fn = theano.function(self.inps, [loss,acc], updates=updates)
-        self.validate_fn = theano.function(self.inps, [loss,acc])
+        self.validate_fn = theano.function(self.inps, [loss,acc,probs])
 
     def to1hot(self, index):
         # convert list of indices to one-hot representation
@@ -186,7 +187,7 @@ class LSTM:
 
         # functions
         self.train_fn = theano.function(self.inps, [loss,acc], updates=updates)
-        self.validate_fn = theano.function(self.inps, [loss,acc])
+        self.validate_fn = theano.function(self.inps, [loss,acc,probs])
 
     def to1hot(self, index):
         # convert list of indices to one-hot representation
@@ -236,7 +237,7 @@ class BiLSTM:
 
         # functions
         self.train_fn = theano.function(self.inps, [loss,acc], updates=updates)
-        self.validate_fn = theano.function(self.inps, [loss,acc])
+        self.validate_fn = theano.function(self.inps, [loss,acc,probs])
 
     def to1hot(self, index):
         # convert list of indices to one-hot representation
@@ -265,6 +266,12 @@ class BiLSTM:
         p = L.get_output(l_out)
         return p, l_out
 
+def evaluate(probs, targets):
+    # compute precision @1
+    preds = np.argmax(probs, axis=1)
+    return float((targets[np.arange(targets.shape[0]),preds]==1).sum())/ \
+            targets.shape[0]
+
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', dest='model', type=str, 
@@ -281,7 +288,7 @@ if __name__=='__main__':
     m = eval(params['model'])(len(data.chardict), 10, 10, len(data.labeldict), params['lr'])
 
     logger = open('../logs/%s_%.3f_log.txt' % (params['model'].lower(),params['lr']),'w')
-    max_acc = 0.
+    max_prec = 0.
     tst = time.time()
     for epoch in range(100):
         print 'epoch ', epoch
@@ -293,14 +300,17 @@ if __name__=='__main__':
         
         tot_loss, tot_acc = 0., 0.
         n = 0
+        probs = []
+        targets = []
         for (e,l) in mb_test:
-            loss, acc = m.validate(e,l)
+            loss, _, pr = m.validate(e,l)
+            probs.append(pr)
+            targets.append(l)
             tot_loss += loss
-            tot_acc += acc
             n += 1
-        acc = tot_acc/n
-        if acc>max_acc: max_acc = acc
-        message = 'VAL loss = %.3f acc = %.3f max_acc = %.3f' % (tot_loss/n, acc, max_acc)
+        prec = evaluate(np.vstack(probs), np.vstack(targets))
+        if prec>max_prec: max_prec = prec
+        message = 'VAL loss = %.3f prec = %.3f max_prec = %.3f' % (tot_loss/n, prec, max_prec)
         logger.write(message + '\n')
         print message
     logger.write('Time elapsed = %.2f\n' % (time.time()-tst))
