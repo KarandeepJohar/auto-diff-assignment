@@ -49,7 +49,7 @@ def _softMax(x):
     return dist
 
 def _crossEnt(x,y):
-    EPSILON = 10e-5
+    EPSILON = 10e-3
     log_x = np.log(x + EPSILON)
     return - np.multiply(y,log_x).sum(axis=1, keepdims=True)
 
@@ -101,7 +101,7 @@ BP_FUNS = {
     'square':           [lambda delta,out,x : delta * 2.0 * x],
     'crossEnt-softMax': [lambda delta,out,x,y: delta*(_softMax(x)*y.sum(axis=1)[:,None] - y),  lambda delta,out,x,y:-delta*x*y],  #second one is never used for much
     'tanh':             [lambda delta,out,x : delta * (1.0 - np.square(out))],
-    'relu':             [lambda delta,out,x : delta * ((x>0).astype(np.float64))],
+    'relu':             [lambda delta,out,x : delta * ((x>=0).astype(np.float64))],
     }
 
 class Autograd(object):
@@ -189,7 +189,7 @@ def MLP():
     x.input = f.input()
     x.W1 = f.param()
     x.b1 = f.param()
-    x.o1 = f.tanh( f.mul(x.input,x.W1) + x.b1 )
+    x.o1 = f.relu( f.mul(x.input,x.W1) + x.b1 )
     x.W2 = f.param()
     x.b2 = f.param()
     x.o2 = f.relu( f.mul(x.o1,x.W2) + x.b2 )
@@ -295,6 +295,39 @@ def MNIST():
     fpd = ad.eval(h.operationSequence(h.output), 
             h.inputDict(input=X_test, W1=fwd['W1'], b1=fwd['b1'], W2=fwd['W2'], b2=fwd['b2'],W3=fwd['W3'], b3=fwd['b3']))
 
+def LRCode(x,y, nullWeights):
+    h = LogisticRegression()
+    ad = Autograd(h)
+    dataDict = {
+            'input': x,
+            'y': y,
+            }
+    fwd = learn(LogisticRegression, dataDict, epochs=50, batch_size=10000000, rate=0.5, weights=np.hstack([nullWeights, nullWeights]))
+    fpd = ad.eval(h.operationSequence(h.output), h.inputDict(input=x, weights=fwd['weights']))
+    print 'learned/target predictions, logistic regression'
+    print np.hstack([fpd['output'], y])
+
+def linearRegressionCode(x, targetWeights, px):
+    h = LinearRegression()
+    epochs =10
+    ad = Autograd(h)                
+    nullWeights = np.zeros(targetWeights.shape)
+    print 'clean training data, linear regression'
+    dataDict = {
+            'input': x,
+            'y': px,
+            }
+    fwd = learn(LinearRegression, dataDict, epochs=10, rate=1, batch_size=1000, weights=nullWeights)
+    fpd = ad.eval(h.operationSequence(h.output), h.inputDict(input=x[:10,:], weights=fwd['weights']))
+    print 'learned/target weights:'
+    print np.hstack([fwd['weights'], targetWeights])
+   
+    noisyPx = px + 0.1 * np.random.rand(px.shape[0], px.shape[1])
+    print 'noisy training data, linear regression'
+    fd = learn(LinearRegression, dataDict, epochs=10, rate=1, batch_size=1000, weights=nullWeights)
+    print 'learned/target weights:'
+    print np.hstack([fd['weights'], targetWeights])
+
 def learn(claz, dataDict, epochs=10, rate=1.0, batch_size=100, **initDict):
     def dvals(d,keys):
         return " ".join(map(lambda k:'%s=%g' % (k,d[k]), keys.split()))
@@ -303,7 +336,7 @@ def learn(claz, dataDict, epochs=10, rate=1.0, batch_size=100, **initDict):
     ad = Autograd(h)
     dataParamDict = h.inputDict(**initDict)
     opseq = h.operationSequence(h.loss)
-    epsilon = np.float_(0.000001)
+    epsilon = np.float_(0.00001)
     for i in range(epochs):
         for j in xrange(0,x.shape[0],batch_size):
             x_c = x[j:j+batch_size,:]
@@ -315,29 +348,29 @@ def learn(claz, dataDict, epochs=10, rate=1.0, batch_size=100, **initDict):
 
             for rname in gd:
                 if h.isParam(rname):
+                    if rname:
+                        ngd = np.ones(vd[rname].shape)
+                        for p in xrange(vd[rname].shape[0]):
+                            if len(vd[rname].shape)>1:
+                                for q in xrange(vd[rname].shape[1]):
+                                    # print i,j
+                                    tempVD = vd.copy()
+                                    tempVD[rname][p][q]+=epsilon
+                                    ngd[p][q]=ad.eval(opseq, tempVD)["loss"]
+                                    tempVD = vd.copy()
+                                    tempVD[rname][p][q]-=epsilon
+                                    ngd[p][q]-=ad.eval(opseq, tempVD)["loss"]
+                            else:
+                                tempVD = vd.copy()
+                                tempVD[rname][p]+=epsilon
+                                ngd[p]=ad.eval(opseq, tempVD)["loss"]
+                                tempVD = vd.copy()
+                                tempVD[rname][p]-=epsilon
+                                ngd[p]-=ad.eval(opseq, tempVD)["loss"]
 
-
-                    ngd = np.ones(vd[rname].shape)*-999
-                    for i in xrange(vd[rname].shape[0]):
-                        if len(vd[rname].shape)>1:
-                            for j in xrange(vd[rname].shape[1]):
-                                # print i,j
-
-                                dataParamDict[rname][i][j]+=epsilon
-                                ngd[i][j]=ad.eval(opseq, dataParamDict)["loss"]
-                                dataParamDict[rname][i][j]-=2*epsilon
-                                ngd[i][j]-=ad.eval(opseq, dataParamDict)["loss"]
-                                dataParamDict[rname][i][j]+=epsilon
-                        else:
-                            dataParamDict[rname][i]+=epsilon
-                            ngd[i]=ad.eval(opseq, dataParamDict)["loss"]
-                            dataParamDict[rname][i]-=2*epsilon
-                            ngd[i]-=ad.eval(opseq, dataParamDict)["loss"]
-                            dataParamDict[rname][i]+=epsilon
-
-                    print rname, vd[rname]
-                    print "GD:", gd[rname]
-                    print "numerical", (ngd)/(2*epsilon)
+                        print rname
+                        print "GD:", gd[rname]
+                        print "numerical", (ngd)/(2*epsilon)
 
                     
 
@@ -366,7 +399,7 @@ def bhuwanMLP(x,y):
             'input': x,
             'y': y,
             }
-    fwd = learn(MLP, dataDict, epochs=1, rate=1, batch_size=10000000,
+    fwd = learn(MLP, dataDict, epochs=1, rate=1, batch_size=1000,
             W1=W1,
             b1=b1,
             W2=W2,
@@ -407,9 +440,9 @@ if __name__ == "__main__":
     y = np.hstack([y2, 1-y2])
     
     
-    #LRCode(x, y, nullWeights)
+    # LRCode(x, y, nullWeights)
     #bhuwan's code
-    #linearRegressionCode(x, targetWeights, px)
+    # linearRegressionCode(x, targetWeights, px)
     bhuwanMLP(x,y)
 
     # MNIST()
