@@ -49,7 +49,7 @@ def _softMax(x):
     return dist
 
 def _crossEnt(x,y):
-    EPSILON = 10e-5
+    EPSILON = 10e-3
     log_x = np.log(x + EPSILON)
     return - np.multiply(y,log_x).sum(axis=1, keepdims=True)
 
@@ -101,7 +101,7 @@ BP_FUNS = {
     'square':           [lambda delta,out,x : delta * 2.0 * x],
     'crossEnt-softMax': [lambda delta,out,x,y: delta*(_softMax(x)*y.sum(axis=1)[:,None] - y),  lambda delta,out,x,y:-delta*x*y],  #second one is never used for much
     'tanh':             [lambda delta,out,x : delta * (1.0 - np.square(out))],
-    'relu':             [lambda delta,out,x : delta * ((x>0).astype(np.float64))],
+    'relu':             [lambda delta,out,x : delta * ((x>=0).astype(np.float64))],
     }
 
 class Autograd(object):
@@ -189,7 +189,7 @@ def MLP():
     x.input = f.input()
     x.W1 = f.param()
     x.b1 = f.param()
-    x.o1 = f.tanh( f.mul(x.input,x.W1) + x.b1 )
+    x.o1 = f.relu( f.mul(x.input,x.W1) + x.b1 )
     x.W2 = f.param()
     x.b2 = f.param()
     x.o2 = f.relu( f.mul(x.o1,x.W2) + x.b2 )
@@ -273,18 +273,15 @@ def MNIST():
     X_test = parse_images("t10k-images.idx3-ubyte")#[:1000,:]
     y_test = parse_labels("t10k-labels.idx1-ubyte")#[:1000,:]
     
-    W1 =0.01*np.random.rand(X_train.shape[1],200)
-    b1=0.01*np.random.rand(200)
-    W2=0.01*np.random.rand(200,100)
-    b2=0.01*np.random.rand(100)
-    W3=0.01*np.random.rand(100,y_train.shape[1])
-    b3=0.01*np.random.rand(y_train.shape[1])
+    W1=np.random.rand(X_train.shape[1],200)
+    b1=np.random.rand(200)
+    W2=np.random.rand(200,100)
+    b2=np.random.rand(100)
+    W3=np.random.rand(100,y_train.shape[1])
+    b3=np.random.rand(y_train.shape[1])
 
-    dataDict = {
-            'input': X_train,
-            'y': y_train,
-            }
-    fwd = learn(MLP2, dataDict, epochs=100, rate=1., batch_size=100,
+    dataDict = {'input': X_train, 'y': y_train}
+    fwd = learn(MLP2, dataDict, epochs=1, rate=10., batch_size=1000000000,
             W1=W1,
             b1=b1,
             W2=W2,
@@ -298,6 +295,39 @@ def MNIST():
     fpd = ad.eval(h.operationSequence(h.output), 
             h.inputDict(input=X_test, W1=fwd['W1'], b1=fwd['b1'], W2=fwd['W2'], b2=fwd['b2'],W3=fwd['W3'], b3=fwd['b3']))
 
+def LRCode(x,y, nullWeights):
+    h = LogisticRegression()
+    ad = Autograd(h)
+    dataDict = {
+            'input': x,
+            'y': y,
+            }
+    fwd = learn(LogisticRegression, dataDict, epochs=50, batch_size=10000000, rate=0.5, weights=np.hstack([nullWeights, nullWeights]))
+    fpd = ad.eval(h.operationSequence(h.output), h.inputDict(input=x, weights=fwd['weights']))
+    print 'learned/target predictions, logistic regression'
+    print np.hstack([fpd['output'], y])
+
+def linearRegressionCode(x, targetWeights, px):
+    h = LinearRegression()
+    epochs =10
+    ad = Autograd(h)                
+    nullWeights = np.zeros(targetWeights.shape)
+    print 'clean training data, linear regression'
+    dataDict = {
+            'input': x,
+            'y': px,
+            }
+    fwd = learn(LinearRegression, dataDict, epochs=10, rate=1, batch_size=1000, weights=nullWeights)
+    fpd = ad.eval(h.operationSequence(h.output), h.inputDict(input=x[:10,:], weights=fwd['weights']))
+    print 'learned/target weights:'
+    print np.hstack([fwd['weights'], targetWeights])
+   
+    noisyPx = px + 0.1 * np.random.rand(px.shape[0], px.shape[1])
+    print 'noisy training data, linear regression'
+    fd = learn(LinearRegression, dataDict, epochs=10, rate=1, batch_size=1000, weights=nullWeights)
+    print 'learned/target weights:'
+    print np.hstack([fd['weights'], targetWeights])
+
 def learn(claz, dataDict, epochs=10, rate=1.0, batch_size=100, **initDict):
     def dvals(d,keys):
         return " ".join(map(lambda k:'%s=%g' % (k,d[k]), keys.split()))
@@ -306,18 +336,47 @@ def learn(claz, dataDict, epochs=10, rate=1.0, batch_size=100, **initDict):
     ad = Autograd(h)
     dataParamDict = h.inputDict(**initDict)
     opseq = h.operationSequence(h.loss)
+    epsilon = np.float_(0.00001)
     for i in range(epochs):
-        for j in range(0,x.shape[0],batch_size):
+        for j in xrange(0,x.shape[0],batch_size):
             x_c = x[j:j+batch_size,:]
             y_c = y[j:j+batch_size,:]
             dataParamDict['input'] = x_c
             dataParamDict['y'] = y_c
             vd = ad.eval(opseq,dataParamDict)
             gd = ad.bprop(opseq,vd,loss=np.float_(1.0))
+
             for rname in gd:
                 if h.isParam(rname):
-                    if gd[rname].shape!=dataParamDict[rname].shape:
-                        print rname, gd[rname].shape, dataParamDict[rname].shape
+                    if rname:
+                        ngd = np.ones(vd[rname].shape)
+                        for p in xrange(vd[rname].shape[0]):
+                            if len(vd[rname].shape)>1:
+                                for q in xrange(vd[rname].shape[1]):
+                                    # print i,j
+                                    tempVD = vd.copy()
+                                    tempVD[rname][p][q]+=epsilon
+                                    ngd[p][q]=ad.eval(opseq, tempVD)["loss"]
+                                    tempVD = vd.copy()
+                                    tempVD[rname][p][q]-=epsilon
+                                    ngd[p][q]-=ad.eval(opseq, tempVD)["loss"]
+                            else:
+                                tempVD = vd.copy()
+                                tempVD[rname][p]+=epsilon
+                                ngd[p]=ad.eval(opseq, tempVD)["loss"]
+                                tempVD = vd.copy()
+                                tempVD[rname][p]-=epsilon
+                                ngd[p]-=ad.eval(opseq, tempVD)["loss"]
+
+                        print rname
+                        print "GD:", gd[rname]
+                        print "numerical", (ngd)/(2*epsilon)
+
+                    
+
+                    # if gd[rname].shape!=dataParamDict[rname].shape:
+                    #     print rname, gd[rname].shape, dataParamDict[rname].shape
+
                     dataParamDict[rname] = dataParamDict[rname] - rate*gd[rname]
         print 'epoch:',i+1,dvals(vd,'loss'), error(vd['y'], vd['output']) 
         if vd['loss'] < 0.001:
@@ -340,7 +399,7 @@ def bhuwanMLP(x,y):
             'input': x,
             'y': y,
             }
-    fwd = learn(MLP, dataDict, epochs=50, rate=1, batch_size=100,
+    fwd = learn(MLP, dataDict, epochs=1, rate=1, batch_size=1000,
             W1=W1,
             b1=b1,
             W2=W2,
@@ -381,12 +440,12 @@ if __name__ == "__main__":
     y = np.hstack([y2, 1-y2])
     
     
-    #LRCode(x, y, nullWeights)
+    # LRCode(x, y, nullWeights)
     #bhuwan's code
-    #linearRegressionCode(x, targetWeights, px)
-    #bhuwanMLP(x,y)
+    # linearRegressionCode(x, targetWeights, px)
+    bhuwanMLP(x,y)
 
-    MNIST()
+    # MNIST()
 
 
 
