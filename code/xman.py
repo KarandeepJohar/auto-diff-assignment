@@ -168,6 +168,8 @@ class XMan(object):
                 reg.name = 'z%d' % self._nextTmp
                 self._nextTmp += 1
                 self._registers[reg.name] = reg
+            if reg.name not in self._registers:
+                self._registers[reg.name] = reg
             for child in reg.inputsTo():
                 _recursivelyLabelUnnamedRegisters(child)
         for regName,reg in self.namedRegisterItems():
