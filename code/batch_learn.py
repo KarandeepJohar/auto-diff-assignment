@@ -348,29 +348,28 @@ def learn(claz, dataDict, epochs=10, rate=1.0, batch_size=100, **initDict):
 
             for rname in gd:
                 if h.isParam(rname):
-                    if rname:
-                        ngd = np.ones(vd[rname].shape)
-                        for p in xrange(vd[rname].shape[0]):
-                            if len(vd[rname].shape)>1:
-                                for q in xrange(vd[rname].shape[1]):
-                                    # print i,j
-                                    tempVD = vd.copy()
-                                    tempVD[rname][p][q]+=epsilon
-                                    ngd[p][q]=ad.eval(opseq, tempVD)["loss"]
-                                    tempVD = vd.copy()
-                                    tempVD[rname][p][q]-=epsilon
-                                    ngd[p][q]-=ad.eval(opseq, tempVD)["loss"]
-                            else:
-                                tempVD = vd.copy()
-                                tempVD[rname][p]+=epsilon
-                                ngd[p]=ad.eval(opseq, tempVD)["loss"]
-                                tempVD = vd.copy()
-                                tempVD[rname][p]-=epsilon
-                                ngd[p]-=ad.eval(opseq, tempVD)["loss"]
+                    ngd = np.ones(vd[rname].shape)
+                    for p in xrange(vd[rname].shape[0]):
+                        if len(vd[rname].shape)>1:
+                            for q in xrange(vd[rname].shape[1]):
+                                # print i,j
+                                val = vd[rname][p][q]
+                                vd[rname][p][q] = val+epsilon
+                                ngd[p][q]=ad.eval(opseq, vd)["loss"]
+                                vd[rname][p][q] = val-epsilon
+                                ngd[p][q]-=ad.eval(opseq, vd)["loss"]
+                                vd[rname][p][q] = val
+                        else:
+                            val = vd[rname][p]
+                            vd[rname][p] = val+epsilon
+                            ngd[p]=ad.eval(opseq, vd)["loss"]
+                            vd[rname][p] = val-epsilon
+                            ngd[p]-=ad.eval(opseq, vd)["loss"]
+                            vd[rname][p] = val
 
-                        print rname
-                        print "GD:", gd[rname]
-                        print "numerical", (ngd)/(2*epsilon)
+                    print rname
+                    print "GD:", gd[rname]
+                    print "numerical", (ngd)/(2*epsilon)
 
                     
 
@@ -386,6 +385,8 @@ def learn(claz, dataDict, epochs=10, rate=1.0, batch_size=100, **initDict):
 
 def bhuwanMLP(x,y):
     h = MLP()
+    for op in h.operationSequence(h.loss):
+        print op
     ad = Autograd(h)
     W1 = np.random.rand(x.shape[1],5)
     b1=np.random.rand(5)
@@ -440,7 +441,7 @@ if __name__ == "__main__":
     y = np.hstack([y2, 1-y2])
     
     
-    # LRCode(x, y, nullWeights)
+    #LRCode(x, y, nullWeights)
     #bhuwan's code
     # linearRegressionCode(x, targetWeights, px)
     bhuwanMLP(x,y)
