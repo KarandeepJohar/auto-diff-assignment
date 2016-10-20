@@ -1,6 +1,7 @@
 # a sample use of xman for learning tasks
 # 
 
+import sys
 import numpy as np
 import scipy.stats as ss
 from xman import *
@@ -9,6 +10,8 @@ from utils import *
 
 TRACE_EVAL = False
 TRACE_BP = False
+
+EPS = 1e-4
 
 # some useful functions
 # declare all operations here first
@@ -199,6 +202,7 @@ class LSTM:
         self._declareParams()
         self._declareInputs()
         self.build()
+        self._grad_check()
 
     def display(self):
         for o in self.graph.operationSequence(self.graph.loss):
@@ -293,6 +297,40 @@ class LSTM:
         paramDict['W1'] = np.random.rand(num_hidden, out_size)
         paramDict['b1'] = np.random.rand(out_size)
         return paramDict
+
+    def fwd(self, valueDict):
+        ad = Autograd(self.graph)
+        opseq = self.graph.operationSequence(self.graph.loss)
+        return ad.eval(opseq, valueDict)
+
+    def bwd(self, valueDict):
+        ad = Autograd(self.graph)
+        opseq = self.graph.operationSequence(self.graph.loss)
+        return ad.bprop(opseq, valueDict,loss=np.float_(1.0))
+
+    def _grad_check(self):
+        print "Checking gradients"
+        params = self.init_params(2,2,2)
+        data = {}
+        for i in range(self.length):
+            data['input_%d'%i] = np.random.rand(5,2)
+        data['y'] = np.random.rand(5,2)
+        data['hid_init'] = np.random.rand(5,2)
+        data['cell_init'] = np.random.rand(5,2)
+        data.update(params)
+        fd = self.fwd(data)
+        grads = self.bwd(fd)
+        for rname in grads:
+            if self.graph.isParam(rname):
+                fd[rname].ravel()[0] += EPS
+                fp = self.fwd(fd)
+                a = fp['loss']
+                fd[rname].ravel()[0] -= 2*EPS
+                fm = self.fwd(fd)
+                b = fm['loss']
+                if not np.isclose(grads[rname].ravel()[0],(a-b)/(2*EPS), atol=1e-4):
+                    raise ValueError("gradients not close for %s"%rname)
+        print "Gradients OK"
 
 class MLP:
 
@@ -501,7 +539,8 @@ def bhuwanMLP(x,y):
     print fpd['W2'].shape, fpd['b2'].shape
 
 def bhuwanLSTM(x,y):
-    lstm = LSTM(2)
+    lstm = LSTM(1)
+    sys.exit()
     h = lstm.graph
     ad = Autograd(h)
     init_dict = lstm.init_params(x.shape[1],5,y.shape[1])
