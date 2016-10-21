@@ -7,193 +7,34 @@ import scipy.stats as ss
 from xman import *
 import struct
 from utils import *
-
-TRACE_EVAL = False
-TRACE_BP = False
+from autograd import *
 
 EPS = 1e-4
-
-# some useful functions
-# declare all operations here first
-
-class f(XManFunctions):
-    @staticmethod
-    def square(a):
-        return XManFunctions.registerDefinedByOperator('square',a)
-    @staticmethod
-    def mean(a):
-        return XManFunctions.registerDefinedByOperator('mean',a)
-    @staticmethod
-    def softMax(a):
-        return XManFunctions.registerDefinedByOperator('softMax',a)
-    @staticmethod
-    def crossEnt(a,b):
-        return XManFunctions.registerDefinedByOperator('crossEnt',a,b)
-    @staticmethod
-    def tanh(a):
-        return XManFunctions.registerDefinedByOperator('tanh',a)
-    @staticmethod
-    def relu(a):
-        return XManFunctions.registerDefinedByOperator('relu',a)
-    @staticmethod
-    def sigmoid(a):
-        return XManFunctions.registerDefinedByOperator('sigmoid',a)
-    @staticmethod
-    def hadamard(a,b):
-        return XManFunctions.registerDefinedByOperator('hadamard',a,b)
-
-# the functions that autograd.eval will use to evaluate each function,
-# to be called with the functions actual inputs as arguments
-
-def _softMax(x):
-    maxes = np.amax(x, axis=1)
-    # print "line number 35", x.shape, maxes.shape
-    maxes = maxes.reshape(maxes.shape[0], 1)
-    # print "line number 37", maxes.shape
-    e_x = np.exp(x - maxes)
-    sums = np.sum(e_x, axis=1)
-    # print "line number 40",  e_x.shape, sums.shape
-    sums = sums.reshape(sums.shape[0], 1)
-    # print "line number 42", sums.shape
-    dist = e_x / sums
-    return dist
-
-def _crossEnt(x,y):
-    EPSILON = 10e-5
-    log_x = np.log(x + EPSILON)
-    return - np.multiply(y,log_x).sum(axis=1, keepdims=True)
-
-EVAL_FUNS = {
-    'add':      lambda x1,x2: x1+x2,
-    'subtract': lambda x1,x2: x1-x2,
-    'mul':      lambda x1,x2: np.dot(x1,x2),
-    'mean':     lambda x:x.mean(),
-    'square':   np.square,
-    'softMax':  _softMax,
-    'crossEnt': _crossEnt,
-    'tanh': lambda x: np.tanh(x),
-    'relu': lambda x: np.maximum(0,x),
-    'sigmoid': lambda x: np.reciprocal(1.+np.exp(-x)),
-    'hadamard': lambda x1,x2: x1*x2,
-    }
-
-# the functions that autograd.bprop will use in reverse mode
-# differentiation.  BP_FUNS[f] is a list of functions df1,....,dfk
-# where dfi is used in propagating errors to the i-th input xi of f.
-# Specifically, dfi is called with the ordinary inputs to f, with two
-# additions: the incoming error, and the output of the function, which
-# was computed by autograd.eval in the eval stage.  dfi will return
-# delta * df/dxi [f(x1,...,xk)]
-# 
-# note: I don't have derivatives for crossEnt and softMax, instead we
-# will look for patterns of the form "z = crossEnt(softMax(x), y)" and
-# replace them with "z = crossEnt-softMax(x,y)", which we DO have a
-# derivative defined for.  
-
-def _derivDot1(delta,out,x1,x2):
-    return np.dot(delta, x2.transpose())
-
-def _derivDot2(delta,out,x1,x2):
-    return np.dot(x1.transpose(), delta)
-
-def _derivAdd(delta,x1):
-    if delta.shape!=x1.shape:
-        # broadcast, sum along axis=0
-        if delta.shape[1]!=x1.shape[0]:
-            raise ValueError("Dimension Mismatch")
-        return delta.sum(axis=0)
-    else: return delta
-
-BP_FUNS = {
-    'add':              [lambda delta,out,x1,x2: _derivAdd(delta,x1),    lambda delta,out,x1,x2: _derivAdd(delta,x2)],
-    'subtract':         [lambda delta,out,x1,x2: _derivAdd(delta,x1),    lambda delta,out,x1,x2: -_derivAdd(delta,x2)],
-    'mul':              [_derivDot1, _derivDot2],
-    'mean':             [lambda delta,out,x : delta * 1.0/float(x.shape[0])*np.ones(x.shape)],
-    'square':           [lambda delta,out,x : delta * 2.0 * x],
-    'crossEnt-softMax': [lambda delta,out,x,y: delta*(_softMax(x)*y.sum(axis=1)[:,None] - y),  lambda delta,out,x,y:-delta*x*y],  #second one is never used for much
-    'tanh':             [lambda delta,out,x : delta * (1.0 - np.square(out))],
-    'relu':             [lambda delta,out,x : delta * ((x>0).astype(np.float64))],
-    'sigmoid':          [lambda delta,out,x : delta * out * (1.-out)],
-    'hadamard':         [lambda delta,out,x1,x2: delta * x2,    lambda delta,out,x1,x2: delta * x1],
-    }
-
-class Autograd(object):
-
-    def __init__(self,xman):
-        self.xman = xman
-
-    def eval(self,opseq,valueDict):
-        """ Evaluate the function defined by the operation sequence, where
-        valueDict is a dict holding the values of any
-        inputs/parameters that are needed (indexed by register name).
-        """
-        for (dstName,funName,inputNames) in opseq:
-            if TRACE_EVAL: print 'eval:',dstName,'=',funName,inputNames
-            inputValues = map(lambda a:valueDict[a], inputNames)
-            fun = EVAL_FUNS[funName] 
-            result = fun(*inputValues)
-            valueDict[dstName] = result
-        return valueDict
-
-    def bprop(self,opseq,valueDict,**deltaDict):
-        """ For each intermediate register g used in computing the function f
-        associated with the opseq, find df/dg.  Here valueDict is a
-        dict holding the values of any inputs/parameters that are
-        needed for the gradient (indexed by register name), as
-        returned by eval.
-        """
-        for (dstName,funName,inputNames) in self.optimizeForBProp(opseq):
-            delta = deltaDict[dstName]
-            if TRACE_BP: print 'bprop [',delta,']',dstName,'=',funName,inputNames
-            # values will be extended to include the next-level delta
-            # and the output, and these will be passed as arguments
-            values = [delta] + map(lambda a:valueDict[a], [dstName]+list(inputNames))
-            for i in range(len(inputNames)):
-                if TRACE_BP: print ' -',dstName,'->',funName,'-> (...',inputNames[i],'...)'
-                result = (BP_FUNS[funName][i])(*values)
-                # increment a running sum of all the delta's that are
-                # pushed back to the i-th parameter, initializing the
-                # zero if needed.
-                self._incrementBy(deltaDict, inputNames[i], result)
-        return deltaDict
-
-    def _incrementBy(self, dict, key, inc):
-        if key not in dict: dict[key] = inc
-        else: dict[key] = dict[key] + inc
-
-    def optimizeForBProp(self,opseq):
-        """ Optimize an operation sequence for backprop.  Currently, reverse
-        it and replace any occurence of "z=crossEnt(a,b), ...,
-        a=softMax(c)" with with "z=crossEnt-softMax(c,b)"
-        """
-        opseq = list(reversed(opseq))
-        # find where z = f(...) appears
-        def find(dst=None,fun=None):
-            def match(actual,target): return target==None or actual==target
-            for k,(dstName,funName,inputNames) in enumerate(opseq):
-                if match(dstName,dst) and match(funName,fun):
-                    return k
-            return -1
-        # look for places to optimize
-        crossEntOptimizations = []
-        for k,(dstName,funName,inputNames) in enumerate(opseq):
-            # look for z=crossEnt(softMax(p), y) where y is an input or param
-            if funName=='crossEnt':
-                (a,b) = inputNames; ka = find(dst=a); kb = find(dst=b)
-                if ka>=0 and kb<0 and opseq[ka][1]=='softMax':
-                    crossEntOptimizations.append((k,ka))
-        # perform the optimization, by splicing out operation index ka
-        # and replacing operation k with a single crossEnt-softMax
-        # operation
-        for (k,ka) in crossEntOptimizations:
-            z = opseq[k][0]
-            b = opseq[k][2][1]
-            c = opseq[ka][2][0]
-            opseq = opseq[:k] + [(z,'crossEnt-softMax',(c,b))] + opseq[k+1:ka]+opseq[ka+1:]
-        return opseq
 #
 # some test cases
 #
+
+def _grad_check(network, data, params):
+    print "Checking gradients"
+    data.update(params)
+    fd = network.fwd(data)
+    grads = network.bwd(fd)
+    for rname in grads:
+        if network.graph.isParam(rname):
+            fd[rname].ravel()[0] += EPS
+            fp = network.fwd(fd)
+            a = fp['loss']
+            fd[rname].ravel()[0] -= 2*EPS
+            fm = network.fwd(fd)
+            b = fm['loss']
+            fd[rname].ravel()[0] += EPS
+            auto = grads[rname].ravel()[0]
+            num = (a-b)/(2*EPS)
+            if not np.isclose(auto, num, atol=1e-3):
+                raise ValueError("gradients not close for %s, Auto %.5f Num %.5f"
+                        % (rname, auto, num))
+    print "Gradients OK"
+
 
 class Network:
     """
@@ -213,27 +54,6 @@ class Network:
         ad = Autograd(self.graph)
         opseq = self.graph.operationSequence(self.graph.loss)
         return ad.bprop(opseq, valueDict,loss=np.float_(1.0))
-
-    def _grad_check(self, data, params):
-        print "Checking gradients"
-        data.update(params)
-        fd = self.fwd(data)
-        grads = self.bwd(fd)
-        for rname in grads:
-            if self.graph.isParam(rname):
-                fd[rname].ravel()[0] += EPS
-                fp = self.fwd(fd)
-                a = fp['loss']
-                fd[rname].ravel()[0] -= 2*EPS
-                fm = self.fwd(fd)
-                b = fm['loss']
-                fd[rname].ravel()[0] += EPS
-                auto = grads[rname].ravel()[0]
-                num = (a-b)/(2*EPS)
-                if not np.isclose(auto, num, atol=1e-3):
-                    raise ValueError("gradients not close for %s, Auto %.5f Num %.5f"
-                            % (rname, auto, num))
-        print "Gradients OK"
 
     def update(self, dataParamDict, grads, rate):
         for rname in grads:
@@ -330,7 +150,7 @@ class LSTM(Network):
         data['y'] = np.random.rand(5,2)
         data['hid_init'] = np.random.rand(5,2)
         data['cell_init'] = np.random.rand(5,2)
-        self._grad_check(data, params)
+        _grad_check(self, data, params)
 
     def init_params(self, in_size, num_hidden, out_size):
         paramDict = {}
@@ -390,7 +210,7 @@ class MLP(Network):
         data = {}
         data['X'] = np.random.rand(5,2)
         data['y'] = np.random.rand(5,2)
-        self._grad_check(data, params)
+        _grad_check(self, data, params)
 
     def init_params(self, in_size, out_size):
         hid1, hid2 = 100, 20
