@@ -163,15 +163,18 @@ class XMan(object):
                 reg.name = regName
                 self._registers[regName] = reg
         # give names to any other registers used in subexpressions
-        def _recursivelyLabelUnnamedRegisters(reg):
+        def _recursivelyLabelUnnamedRegisters(reg, seen=None):
+            if seen is None: seen = set()
             if not reg.name:
                 reg.name = 'z%d' % self._nextTmp
                 self._nextTmp += 1
                 self._registers[reg.name] = reg
             if reg.name not in self._registers:
                 self._registers[reg.name] = reg
+            seen.add(reg.name)
             for child in reg.inputsTo():
-                _recursivelyLabelUnnamedRegisters(child)
+                if child.name in seen: continue
+                _recursivelyLabelUnnamedRegisters(child, seen)
         for regName,reg in self.namedRegisterItems():
             _recursivelyLabelUnnamedRegisters(reg)
         self._setupComplete = True
@@ -217,17 +220,18 @@ class XMan(object):
         vals = [self.__dict__.get(k) or self.__class__.__dict__.get(k) for k in keys]
         return filter(lambda (reg,regObj):isinstance(regObj,Register), zip(keys,vals))
 
-    def operationSequence(self,reg):
+    def operationSequence(self,reg, previouslyDefined=None):
         """ Traverse the expression tree to find the sequence of operations
         needed to compute the values associated with this register.
         """
         assert self._setupComplete, 'operationSequence() called before setup()'
         # pre-order traversal of the expression tree
-        previouslyDefined = set()
+        if previouslyDefined is None:
+            previouslyDefined = set()
         buf = []
         for child in reg.inputsTo():
             if child.name not in previouslyDefined:
-                buf += self.operationSequence(child)
+                buf += self.operationSequence(child, previouslyDefined)
                 previouslyDefined.add(child.name)
         if reg.definedAs and (not reg.name in previouslyDefined):
             buf.append(reg.definedAs.asStringTuple())

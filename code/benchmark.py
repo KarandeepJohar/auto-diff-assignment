@@ -51,10 +51,12 @@ class MLP:
         return out
 
     def train(self, e, l):
-        return self.train_fn(self.to1hot(e), l)
+        #return self.train_fn(self.to1hot(e), l)
+        return self.train_fn(e.reshape((e.shape[0],e.shape[1]*e.shape[2])), l)
 
     def validate(self, e, l):
-        return self.validate_fn(self.to1hot(e), l)
+        #return self.validate_fn(self.to1hot(e), l)
+        return self.validate_fn(e.reshape((e.shape[0],e.shape[1]*e.shape[2])), l)
 
     def build_network(self):
         l_in = L.InputLayer(shape=(self.batch_size, self.in_size), input_var=self.inps[0])
@@ -98,10 +100,12 @@ class LSTM:
         return out
 
     def train(self, e, l):
-        return self.train_fn(self.to1hot(e), l)
+        #return self.train_fn(self.to1hot(e), l)
+        return self.train_fn(e, l)
 
     def validate(self, e, l):
-        return self.validate_fn(self.to1hot(e), l)
+        #return self.validate_fn(self.to1hot(e), l)
+        return self.validate_fn(e, l)
 
     def build_network(self):
         l_in = L.InputLayer(shape=(self.batch_size, self.max_len, self.in_size), 
@@ -148,10 +152,12 @@ class BiLSTM:
         return out
 
     def train(self, e, l):
-        return self.train_fn(self.to1hot(e), l)
+        #return self.train_fn(self.to1hot(e), l)
+        return self.train_fn(e, l)
 
     def validate(self, e, l):
-        return self.validate_fn(self.to1hot(e), l)
+        #return self.validate_fn(self.to1hot(e), l)
+        return self.validate_fn(e, l)
 
     def build_network(self):
         l_in = L.InputLayer(shape=(self.batch_size, self.max_len, self.in_size), 
@@ -165,12 +171,6 @@ class BiLSTM:
         p = L.get_output(l_out)
         return p, l_out
 
-def evaluate(probs, targets):
-    # compute precision @1
-    preds = np.argmax(probs, axis=1)
-    return float((targets[np.arange(targets.shape[0]),preds]==1).sum())/ \
-            targets.shape[0]
-
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', dest='model', type=str, 
@@ -181,7 +181,8 @@ if __name__=='__main__':
 
     dp = DataPreprocessor()
     data = dp.preprocess('../data/small.train','../data/small.test')
-    mb_train = MinibatchLoader(data.training, 10, 10, len(data.labeldict))
+    mb_train = MinibatchLoader(data.training, 10, 10, len(data.chardict), 
+            len(data.labeldict))
     mb_test = MinibatchLoader(data.test, 10, 10, len(data.labeldict))
 
     m = eval(params['model'])(len(data.chardict), 10, 10, len(data.labeldict), params['lr'])
@@ -206,7 +207,7 @@ if __name__=='__main__':
             probs.append(pr)
             targets.append(l)
             tot_loss += loss
-            n += 1
+            n += e.shape[0]
         prec = evaluate(np.vstack(probs), np.vstack(targets))
         if prec>max_prec: max_prec = prec
         message = 'VAL loss = %.3f prec = %.3f max_prec = %.3f' % (tot_loss/n, prec, max_prec)

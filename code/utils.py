@@ -1,6 +1,12 @@
 import io
 import numpy as np
 
+def evaluate(probs, targets):
+    # compute precision @1
+    preds = np.argmax(probs, axis=1)
+    return float((targets[np.arange(targets.shape[0]),preds]==1).sum())/ \
+            targets.shape[0]
+
 class Data:
     def __init__(self, training, test, chardict, labeldict):
         self.chardict = chardict
@@ -69,12 +75,13 @@ class DataPreprocessor:
         return examples
 
 class MinibatchLoader:
-    def __init__(self, examples, batch_size, max_len, num_labels):
+    def __init__(self, examples, batch_size, max_len, num_chars, num_labels):
         self.batch_size = batch_size
         self.max_len = max_len
         self.examples = examples
         self.num_examples = len(examples)
         self.num_labels = num_labels
+        self.num_chars = num_chars
         self.reset()
 
     def __iter__(self):
@@ -95,11 +102,14 @@ class MinibatchLoader:
         ixs = range(self.ptr,self.ptr+self.batch_size)
         self.ptr += self.batch_size
 
-        e = np.zeros((self.batch_size, self.max_len), dtype='int32') # entity
+        e = np.zeros((self.batch_size, self.max_len, 
+            self.num_chars), dtype='int32') # entity
         l = np.zeros((self.batch_size, self.num_labels), dtype='int32') # labels
         for n, ix in enumerate(ixs):
             ent, lab = self.examples[self.permutation[ix]]
-            e[n,:min(len(ent),self.max_len)] = np.array(ent[:self.max_len])
+            le = min(len(ent),self.max_len)
+            e[n,np.arange(le),ent[:le]] = 1
+            #e[n,:min(len(ent),self.max_len)] = np.array(ent[:self.max_len])
             l[n,lab] = 1
 
         return e, l
