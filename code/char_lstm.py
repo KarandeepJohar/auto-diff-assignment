@@ -360,18 +360,12 @@ class MLP(Network):
 
     def _declareParams(self):
         self.params = {}
-        self.params['W1'] = f.param()
-        self.params['W1'].name = 'W1'
-        self.params['b1'] = f.param()
-        self.params['b1'].name = 'b1'
-        self.params['W2'] = f.param()
-        self.params['W2'].name = 'W2'
-        self.params['b2'] = f.param()
-        self.params['b2'].name = 'b2'
-        self.params['W3'] = f.param()
-        self.params['W3'].name = 'W3'
-        self.params['b3'] = f.param()
-        self.params['b3'].name = 'b3'
+        self.params['W1'] = f.param(name='W1')
+        self.params['b1'] = f.param(name='b1')
+        self.params['W2'] = f.param(name='W2')
+        self.params['b2'] = f.param(name='b2')
+        self.params['W3'] = f.param(name='W3')
+        self.params['b3'] = f.param(name='b3')
 
     def _declareInputs(self):
         self.inputs = {}
@@ -592,42 +586,42 @@ def entityLSTM(train, test, num_chars, max_len, num_hid):
         print message
 
 if __name__ == "__main__":
-    max_len = 10
-    num_hid = 50
-    batch_size = 10
+    #max_len = 10
+    #num_hid = 50
+    #batch_size = 10
 
-    dp = DataPreprocessor()
-    data = dp.preprocess('../data/small.train', '../data/small.test')
-    mb_train = MinibatchLoader(data.training, batch_size, max_len, 
-            len(data.chardict), 
-            len(data.labeldict))
-    mb_test = MinibatchLoader(data.test, batch_size, max_len, 
-            len(data.chardict), len(data.labeldict))
+    #dp = DataPreprocessor()
+    #data = dp.preprocess('../data/small.train', '../data/small.test')
+    #mb_train = MinibatchLoader(data.training, batch_size, max_len, 
+    #        len(data.chardict), 
+    #        len(data.labeldict))
+    #mb_test = MinibatchLoader(data.test, batch_size, max_len, 
+    #        len(data.chardict), len(data.labeldict))
 
-    entityLSTM(mb_train, mb_test, len(data.chardict), max_len, num_hid)
+    #entityLSTM(mb_train, mb_test, len(data.chardict), max_len, num_hid)
     #entityMLP(mb_train, mb_test, len(data.chardict), max_len, num_hid)
     # generate random training data labeled with dot product with random weights,
     # weights and features scaled to +1 -1
-    #def generateData(numExamples,numDims):
-    #    def scaleToPlusOneMinusOne(m):
-    #        return (m - 0.5) * 2.0
-    #    x = scaleToPlusOneMinusOne( np.random.rand(numExamples,numDims) )
-    #    targetWeights = scaleToPlusOneMinusOne( np.random.rand(numDims,1) )
-    #    px = np.dot(x,targetWeights)
-    #    return x,targetWeights,px
-    #
-    #x,targetWeights,px = generateData(10000,2)
+    def generateData(numExamples,numDims):
+        def scaleToPlusOneMinusOne(m):
+            return (m - 0.5) * 2.0
+        x = scaleToPlusOneMinusOne( np.random.rand(numExamples,numDims) )
+        targetWeights = scaleToPlusOneMinusOne( np.random.rand(numDims,1) )
+        px = np.dot(x,targetWeights)
+        return x,targetWeights,px
+    
+    x,targetWeights,px = generateData(10000,2)
 
-    ## now produce data for logistic regression
-    #def sigma(x): return np.reciprocal( np.exp(-x) + 1.0 )
-    #y0 = sigma(px)
-    #y1 = ss.threshold(y0, 0.5, 1.0, 0.0)  # < 0.5 => 0
-    #y2 = ss.threshold(y1, 0.0, 0.5, 1.0)   # > 0.5 => 1
-    #y = np.hstack([y2, 1-y2])
-    #
-    #
-    ##LRCode(x, y, nullWeights)
-    ##bhuwan's code
-    ##linearRegressionCode(x, targetWeights, px)
-    #bhuwanMLP(x,y)
-    ##bhuwanLSTM(x,y)
+    # now produce data for logistic regression
+    def sigma(x): return np.reciprocal( np.exp(-x) + 1.0 )
+    y0 = sigma(px)
+    y1 = ss.threshold(y0, 0.5, 1.0, 0.0)  # < 0.5 => 0
+    y2 = ss.threshold(y1, 0.0, 0.5, 1.0)   # > 0.5 => 1
+    y = np.hstack([y2, 1-y2])
+    
+    
+    #LRCode(x, y, nullWeights)
+    #bhuwan's code
+    #linearRegressionCode(x, targetWeights, px)
+    bhuwanMLP(x,y)
+    #bhuwanLSTM(x,y)

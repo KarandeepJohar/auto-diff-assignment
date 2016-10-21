@@ -79,10 +79,10 @@ class Register(object):
     """
     _validRoles = set("input param operationOutput".split())
 
-    def __init__(self,role=None,default=None):
+    def __init__(self,name=None,role=None,default=None):
         assert role in Register._validRoles
         self.role = role
-        self.name = None
+        self.name = name
         self.definedAs = None
         self.default = default
 
@@ -120,11 +120,11 @@ class XManFunctions(object):
     """
 
     @staticmethod
-    def input(default=None):
-        return Register(role='input',default=default)
+    def input(name=None, default=None):
+        return Register(name=name, role='input',default=default)
     @staticmethod
-    def param(default=None):
-        return Register(role='param',default=default)
+    def param(name=None, default=None):
+        return Register(name=name, role='param',default=default)
 
     @staticmethod
     def add(a,b):
