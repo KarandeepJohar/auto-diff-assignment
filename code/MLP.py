@@ -3,10 +3,6 @@ import time
 import argparse
 import io
 
-
-
-
-
 class MLP:
     def __init__(self, num_chars, max_len, batch_size, num_labels, learning_rate, funcs):
         self.num_chars = num_chars
