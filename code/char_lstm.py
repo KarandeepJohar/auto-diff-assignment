@@ -72,6 +72,9 @@ class LSTM(Network):
         self.build()
 
     def _declareParams(self):
+        # suffixes = []
+        # names = ["W"+str(i) for i in range(1,4)]+ ["b"+str(i) for i in range(1,4)]
+        # self.params = {k:f.param(name=k) for k in names}
         self.params = {}
         self.params['Wi'] = f.param()
         self.params['Wi'].name = 'Wi'
@@ -144,13 +147,17 @@ class LSTM(Network):
         self.display()
         # check
         params = self.init_params(2,2,2)
+        data = self.data_dict()
+        _grad_check(self, data, params)
+
+    def data_dict(self):
         data = {}
         for i in range(self.length):
             data['input_%d'%i] = np.random.rand(5,2)
         data['y'] = np.random.rand(5,2)
         data['hid_init'] = np.random.rand(5,2)
         data['cell_init'] = np.random.rand(5,2)
-        _grad_check(self, data, params)
+        return data
 
     def init_params(self, in_size, num_hidden, out_size):
         paramDict = {}
@@ -179,38 +186,34 @@ class MLP(Network):
         self._build()
 
     def _declareParams(self):
-        self.params = {}
-        self.params['W1'] = f.param(name='W1')
-        self.params['b1'] = f.param(name='b1')
-        self.params['W2'] = f.param(name='W2')
-        self.params['b2'] = f.param(name='b2')
-        self.params['W3'] = f.param(name='W3')
-        self.params['b3'] = f.param(name='b3')
+        names = ["W"+str(i) for i in range(1,4)]+ ["b"+str(i) for i in range(1,4)]
+        # defaultParams = self.init_params(in_size, out_size)
+        self.params = {k:f.param(name=k) for k in names}
+        # self.params = {}
+        
+        # self.params['W1'] = f.param(name='W1')
+        # self.params['b1'] = f.param(name='b1')
+        # self.params['W2'] = f.param(name='W2')
+        # self.params['b2'] = f.param(name='b2')
+        # self.params['W3'] = f.param(name='W3')
+        # self.params['b3'] = f.param(name='b3')
 
     def _declareInputs(self):
         self.inputs = {}
-        self.inputs['X'] = f.input()
-        self.inputs['X'].name = 'X'
-        self.inputs['y'] = f.input()
-        self.inputs['y'].name = 'y'
+        self.inputs['X'] = f.input(name='X')
+        self.inputs['y'] = f.input(name='y')
 
     def _build(self):
         x = XMan()
         # evaluating the model
         x.o1 = f.tanh( f.mul(self.inputs['X'],self.params['W1']) + self.params['b1'] )
         x.o2 = f.tanh( f.mul(x.o1,self.params['W2']) + self.params['b2'] )
-        x.o3= f.relu( f.mul(x.o2,self.params['W3']) + self.params['b3'] )
+        x.o3 = f.relu( f.mul(x.o2,self.params['W3']) + self.params['b3'] )
         x.output = f.softMax(x.o3)
         # loss
         x.loss = f.mean(f.crossEnt(x.output, self.inputs['y']))
         self.graph = x.setup()
         self.display()
-        # check
-        params = self.init_params(2,2)
-        data = {}
-        data['X'] = np.random.rand(5,2)
-        data['y'] = np.random.rand(5,2)
-        _grad_check(self, data, params)
 
     def init_params(self, in_size, out_size):
         hid1, hid2 = 100, 20
@@ -221,6 +224,7 @@ class MLP(Network):
         paramDict['b2'] = 0.01*np.random.rand(hid2)
         paramDict['W3'] = 0.05*np.random.rand(hid2,out_size)
         paramDict['b3'] = 0.05*np.random.rand(out_size)
+
         return paramDict
 
     def data_dict(self, X, y):
@@ -308,12 +312,20 @@ def bhuwanLSTM(x,y):
     print fpd['W1'].shape, fpd['b1'].shape
     print fpd['W2'].shape, fpd['b2'].shape
 
+
+
+
+
 def entityMLP(train, test, num_chars, max_len, num_hid):
     epochs = 50
 
     print "building mlp..."
     mlp = MLP()
     print "done"
+    # check
+    params = mlp.init_params(2,2)
+    data = mlp.data_dict(np.random.rand(5,2),np.random.rand(5,2))
+    _grad_check(mlp, data, params)
     dataParamDict = mlp.init_params(max_len*num_chars, train.num_labels)
     print "training..."
     logger = open('../logs/auto_mlp.txt','w')
@@ -406,42 +418,42 @@ def entityLSTM(train, test, num_chars, max_len, num_hid):
         print message
 
 if __name__ == "__main__":
-    #max_len = 10
-    #num_hid = 50
-    #batch_size = 10
+    max_len = 10
+    num_hid = 50
+    batch_size = 10
 
-    #dp = DataPreprocessor()
-    #data = dp.preprocess('../data/small.train', '../data/small.test')
-    #mb_train = MinibatchLoader(data.training, batch_size, max_len, 
-    #        len(data.chardict), 
-    #        len(data.labeldict))
-    #mb_test = MinibatchLoader(data.test, batch_size, max_len, 
-    #        len(data.chardict), len(data.labeldict))
+    dp = DataPreprocessor()
+    data = dp.preprocess('../data/tiny.train', '../data/tiny.test')
+    mb_train = MinibatchLoader(data.training, batch_size, max_len, 
+           len(data.chardict), 
+           len(data.labeldict))
+    mb_test = MinibatchLoader(data.test, batch_size, max_len, 
+           len(data.chardict), len(data.labeldict))
 
     #entityLSTM(mb_train, mb_test, len(data.chardict), max_len, num_hid)
-    #entityMLP(mb_train, mb_test, len(data.chardict), max_len, num_hid)
+    entityMLP(mb_train, mb_test, len(data.chardict), max_len, num_hid)
     # generate random training data labeled with dot product with random weights,
     # weights and features scaled to +1 -1
-    def generateData(numExamples,numDims):
-        def scaleToPlusOneMinusOne(m):
-            return (m - 0.5) * 2.0
-        x = scaleToPlusOneMinusOne( np.random.rand(numExamples,numDims) )
-        targetWeights = scaleToPlusOneMinusOne( np.random.rand(numDims,1) )
-        px = np.dot(x,targetWeights)
-        return x,targetWeights,px
+    # def generateData(numExamples,numDims):
+    #     def scaleToPlusOneMinusOne(m):
+    #         return (m - 0.5) * 2.0
+    #     x = scaleToPlusOneMinusOne( np.random.rand(numExamples,numDims) )
+    #     targetWeights = scaleToPlusOneMinusOne( np.random.rand(numDims,1) )
+    #     px = np.dot(x,targetWeights)
+    #     return x,targetWeights,px
     
-    x,targetWeights,px = generateData(10000,2)
+    # x,targetWeights,px = generateData(10000,2)
 
-    # now produce data for logistic regression
-    def sigma(x): return np.reciprocal( np.exp(-x) + 1.0 )
-    y0 = sigma(px)
-    y1 = ss.threshold(y0, 0.5, 1.0, 0.0)  # < 0.5 => 0
-    y2 = ss.threshold(y1, 0.0, 0.5, 1.0)   # > 0.5 => 1
-    y = np.hstack([y2, 1-y2])
+    # # now produce data for logistic regression
+    # def sigma(x): return np.reciprocal( np.exp(-x) + 1.0 )
+    # y0 = sigma(px)
+    # y1 = ss.threshold(y0, 0.5, 1.0, 0.0)  # < 0.5 => 0
+    # y2 = ss.threshold(y1, 0.0, 0.5, 1.0)   # > 0.5 => 1
+    # y = np.hstack([y2, 1-y2])
     
     
     #LRCode(x, y, nullWeights)
     #bhuwan's code
     #linearRegressionCode(x, targetWeights, px)
-    bhuwanMLP(x,y)
+    # bhuwanMLP(x,y)
     #bhuwanLSTM(x,y)
