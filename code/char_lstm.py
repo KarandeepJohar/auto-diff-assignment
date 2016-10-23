@@ -48,7 +48,9 @@ class Network:
     def fwd(self, valueDict):
         ad = Autograd(self.graph)
         opseq = self.graph.operationSequence(self.graph.loss)
-        return ad.eval(opseq, valueDict)
+        dataParamDict = self.graph.inputDict(**valueDict)
+
+        return ad.eval(opseq, dataParamDict)
 
     def bwd(self, valueDict):
         ad = Autograd(self.graph)
@@ -177,20 +179,35 @@ class LSTM(Network):
         paramDict['b1'] = np.random.rand(out_size)
         return paramDict
 
+def scale(m):
+    return 0.01
 
 class MLP(Network):
 
-    def __init__(self):
-        self._declareParams()
+    def __init__(self, layer_sizes):
+        self._declareParams(layer_sizes)
         self._declareInputs()
         self._build()
 
-    def _declareParams(self):
-        names = ["W"+str(i) for i in range(1,4)]+ ["b"+str(i) for i in range(1,4)]
+    def _declareParams(self, layer_sizes):
+        print "INITIAZLIZING with layer_sizes:", layer_sizes
+        # W = [scale*np.random.randn(n,m) for m,n in zip(self.layer_sizes[1:], self.layer_sizes[:-1])]
+        # b = [scale*np.random.randn(n) for n in self.layer_sizes[1:]]
+
+
+        # names = ["W"+str(i+1) for i in range(3)]+ ["b"+str(i+1) for i in range(3)]
         # defaultParams = self.init_params(in_size, out_size)
-        self.params = {k:f.param(name=k) for k in names}
-        # self.params = {}
-        
+
+        # self.params = {k:f.param(name=k, default = ) for k in names}
+        self.params = {}
+        for i in range(3):
+            k = i+1
+            self.params['W'+str(k)] = f.param(name='W'+str(k), default=np.random.rand(layer_sizes[i], layer_sizes[i+1]))
+            self.params['b'+str(k)] = f.param(name='b'+str(k), default=np.random.rand(layer_sizes[i+1]))
+            
+            # self.params['W'+str(k)] = f.param(name='W'+str(k))
+            # self.params['b'+str(k)] = f.param(name='b'+str(k))
+            
         # self.params['W1'] = f.param(name='W1')
         # self.params['b1'] = f.param(name='b1')
         # self.params['W2'] = f.param(name='W2')
@@ -320,13 +337,14 @@ def entityMLP(train, test, num_chars, max_len, num_hid):
     epochs = 50
 
     print "building mlp..."
-    mlp = MLP()
+    mlp = MLP([max_len*num_chars, 100, 20, train.num_labels])
     print "done"
     # check
-    params = mlp.init_params(2,2)
-    data = mlp.data_dict(np.random.rand(5,2),np.random.rand(5,2))
-    _grad_check(mlp, data, params)
+    # params = mlp.init_params(2,2)
+    # data = mlp.data_dict(np.random.rand(5,2),np.random.rand(5,2))
+    # _grad_check(mlp, data, params)
     dataParamDict = mlp.init_params(max_len*num_chars, train.num_labels)
+    dataParamDict = {}
     print "training..."
     logger = open('../logs/auto_mlp.txt','w')
     for i in range(epochs):

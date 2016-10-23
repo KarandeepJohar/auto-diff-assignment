@@ -14,7 +14,7 @@ class Autograd(object):
         """
         for (dstName,funName,inputNames) in opseq:
             if TRACE_EVAL: print 'eval:',dstName,'=',funName,inputNames
-            inputValues = map(lambda a:valueDict[a], inputNames)
+            inputValues = map(lambda a:valueDict[a] if a in valueDict else a.default, inputNames)
             fun = EVAL_FUNS[funName] 
             result = fun(*inputValues)
             valueDict[dstName] = result
