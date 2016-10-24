@@ -1,6 +1,7 @@
 # a sample use of xman for learning tasks
 # 
 
+import time
 import sys
 import numpy as np
 import scipy.stats as ss
@@ -9,6 +10,7 @@ import struct
 from utils import *
 from autograd import *
 
+np.random.seed(0)
 EPS = 1e-4
 #
 # some test cases
@@ -48,9 +50,8 @@ class Network:
     def fwd(self, valueDict):
         ad = Autograd(self.graph)
         opseq = self.graph.operationSequence(self.graph.loss)
-        dataParamDict = self.graph.inputDict(**valueDict)
 
-        return ad.eval(opseq, dataParamDict)
+        return ad.eval(opseq, valueDict)
 
     def bwd(self, valueDict):
         ad = Autograd(self.graph)
@@ -182,39 +183,28 @@ class LSTM(Network):
 def scale(m):
     return 0.01
 
+def glorot(m,n):
+    return np.sqrt(12./(m+n))
+
+
 class MLP(Network):
 
-    def __init__(self, layer_sizes):
+    def __init__(self, max_len, layer_sizes):
+        self.max_len = max_len
+        self.num_layers = len(layer_sizes)-1
         self._declareParams(layer_sizes)
         self._declareInputs()
         self._build()
 
     def _declareParams(self, layer_sizes):
         print "INITIAZLIZING with layer_sizes:", layer_sizes
-        # W = [scale*np.random.randn(n,m) for m,n in zip(self.layer_sizes[1:], self.layer_sizes[:-1])]
-        # b = [scale*np.random.randn(n) for n in self.layer_sizes[1:]]
-
-
-        # names = ["W"+str(i+1) for i in range(3)]+ ["b"+str(i+1) for i in range(3)]
-        # defaultParams = self.init_params(in_size, out_size)
-
-        # self.params = {k:f.param(name=k, default = ) for k in names}
         self.params = {}
-        for i in range(3):
+        for i in range(self.num_layers):
             k = i+1
-            self.params['W'+str(k)] = f.param(name='W'+str(k), default=np.random.rand(layer_sizes[i], layer_sizes[i+1]))
-            self.params['b'+str(k)] = f.param(name='b'+str(k), default=np.random.rand(layer_sizes[i+1]))
+            sc = glorot(layer_sizes[i], layer_sizes[i+1])
+            self.params['W'+str(k)] = f.param(name='W'+str(k), default=sc*np.random.rand(layer_sizes[i], layer_sizes[i+1]))
+            self.params['b'+str(k)] = f.param(name='b'+str(k), default=sc*np.random.rand(layer_sizes[i+1]))
             
-            # self.params['W'+str(k)] = f.param(name='W'+str(k))
-            # self.params['b'+str(k)] = f.param(name='b'+str(k))
-            
-        # self.params['W1'] = f.param(name='W1')
-        # self.params['b1'] = f.param(name='b1')
-        # self.params['W2'] = f.param(name='W2')
-        # self.params['b2'] = f.param(name='b2')
-        # self.params['W3'] = f.param(name='W3')
-        # self.params['b3'] = f.param(name='b3')
-
     def _declareInputs(self):
         self.inputs = {}
         self.inputs['X'] = f.input(name='X')
@@ -223,10 +213,10 @@ class MLP(Network):
     def _build(self):
         x = XMan()
         # evaluating the model
-        x.o1 = f.tanh( f.mul(self.inputs['X'],self.params['W1']) + self.params['b1'] )
-        x.o2 = f.tanh( f.mul(x.o1,self.params['W2']) + self.params['b2'] )
-        x.o3 = f.relu( f.mul(x.o2,self.params['W3']) + self.params['b3'] )
-        x.output = f.softMax(x.o3)
+        inp = self.inputs['X']
+        for i in range(self.num_layers):
+            inp = f.relu( f.mul(inp,self.params['W'+str(i+1)]) + self.params['b'+str(i+1)] )
+        x.output = f.softMax(inp)
         # loss
         x.loss = f.mean(f.crossEnt(x.output, self.inputs['y']))
         self.graph = x.setup()
@@ -334,34 +324,32 @@ def bhuwanLSTM(x,y):
 
 
 def entityMLP(train, test, num_chars, max_len, num_hid):
-    epochs = 50
+    epochs = 20
 
     print "building mlp..."
-    mlp = MLP([max_len*num_chars, 100, 20, train.num_labels])
+    mlp = MLP(max_len,[max_len*num_chars, 40, train.num_labels])
     print "done"
     # check
-    # params = mlp.init_params(2,2)
-    # data = mlp.data_dict(np.random.rand(5,2),np.random.rand(5,2))
-    # _grad_check(mlp, data, params)
-    dataParamDict = mlp.init_params(max_len*num_chars, train.num_labels)
-    dataParamDict = {}
+    #params = mlp.init_params(2,2)
+    #data = mlp.data_dict(np.random.rand(5,2),np.random.rand(5,2))
+    #_grad_check(mlp, data, params)
+    dataParamDict = mlp.graph.inputDict()
     print "training..."
     logger = open('../logs/auto_mlp.txt','w')
+    tst = time.time()
     for i in range(epochs):
+        lr = 0.5/((i+1)**2)
         for (e,l) in train:
             # prepare input
-            #dataParamDict['X'] = np.zeros((e.shape[0],max_len*num_chars))
             dataParamDict['X'] = e.reshape((e.shape[0],e.shape[1]*e.shape[2]))
-            #for j in range(e.shape[1]):
-            #    dataParamDict['X'][np.arange(e.shape[0]),j*max_len+e[:,j]] = 1
             dataParamDict['y'] = l
             # fwd-bwd
             vd = mlp.fwd(dataParamDict)
             gd = mlp.bwd(dataParamDict)
-            dataParamDict = mlp.update(dataParamDict, gd, 0.01)
+            dataParamDict = mlp.update(dataParamDict, gd, lr)
             message = 'TRAIN loss = %.3f' % vd['loss']
             logger.write(message+'\n')
-            print message
+            #print message
 
         # validate
         tot_loss, n= 0., 0
@@ -370,17 +358,17 @@ def entityMLP(train, test, num_chars, max_len, num_hid):
         for (e,l) in test:
             # prepare input
             dataParamDict['X'] = e.reshape((e.shape[0],e.shape[1]*e.shape[2]))
-            #for j in range(e.shape[1]):
-            #    dataParamDict['X'][np.arange(e.shape[0]),j*max_len+e[:,j]] = 1
             dataParamDict['y'] = l
             # fwd
             vd = mlp.fwd(dataParamDict)
             tot_loss += vd['loss']
             probs.append(vd['output'])
             targets.append(l)
-            n += e.shape[0]
+            n += 1
         prec = evaluate(np.vstack(probs), np.vstack(targets))
-        message = 'VAL loss = %.3f prec = %.3f' % (tot_loss/n, prec)
+
+        t_elap = time.time()-tst
+        message = 'Epoch %d VAL loss = %.3f prec = %.3f time = %.2f' % (i,tot_loss/n,prec,t_elap)
         logger.write(message+'\n')
         print message
 
@@ -406,7 +394,7 @@ def entityLSTM(train, test, num_chars, max_len, num_hid):
             # fwd-bwd
             vd = lstm.fwd(dataParamDict)
             gd = lstm.bwd(dataParamDict)
-            dataParamDict = lstm.update(dataParamDict, gd, 0.01)
+            dataParamDict = lstm.update(dataParamDict, gd, 0.1)
             message = 'TRAIN loss = %.3f' % vd['loss']
             logger.write(message+'\n')
             print message
@@ -438,7 +426,7 @@ def entityLSTM(train, test, num_chars, max_len, num_hid):
 if __name__ == "__main__":
     max_len = 10
     num_hid = 50
-    batch_size = 10
+    batch_size = 16
 
     dp = DataPreprocessor()
     data = dp.preprocess('../data/tiny.train', '../data/tiny.test')
