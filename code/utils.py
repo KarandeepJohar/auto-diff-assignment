@@ -66,11 +66,15 @@ class DataPreprocessor:
         """
         examples = []
         fin = io.open(infile, 'r')
+        # idx is for the index of the row in the 
+        # original file before shuffling and randomization
+        idx = 0
         for line in fin:
             entity, label = line.rstrip().split('\t')[:2]
             ent = map(lambda c:chardict[c], list(entity))
             lab = map(lambda l:labeldict[l], label.split(','))
-            examples.append((ent, lab))
+            examples.append((idx, ent, lab))
+            idx += 1
         fin.close()
         return examples
 
@@ -102,15 +106,17 @@ class MinibatchLoader:
         ixs = range(self.ptr,self.ptr+self.batch_size)
         self.ptr += self.batch_size
 
+        i = np.zeros((self.batch_size), dtype='int32')
         e = np.zeros((self.batch_size, self.max_len, 
             self.num_chars), dtype='int32') # entity
         l = np.zeros((self.batch_size, self.num_labels), dtype='int32') # labels
         for n, ix in enumerate(ixs):
-            ent, lab = self.examples[self.permutation[ix]]
+            idx, ent, lab = self.examples[self.permutation[ix]]
             le = min(len(ent),self.max_len)
+            i[n] = idx
             e[n,np.arange(le),ent[:le]] = 1
             #e[n,:min(len(ent),self.max_len)] = np.array(ent[:self.max_len])
             l[n,lab] = 1
 
-        return e, l
+        return i, e, l
 

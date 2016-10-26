@@ -196,7 +196,7 @@ if __name__=='__main__':
         # learning rate schedule
         lr = init_lr/((i+1)**2)
 
-        for (e,l) in mb_train:
+        for (idxs,e,l) in mb_train:
             # prepare input
             data_dict = lstm.data_dict(e,l)
             for k,v in data_dict.iteritems():
@@ -212,7 +212,7 @@ if __name__=='__main__':
         tot_loss, n= 0., 0
         probs = []
         targets = []
-        for (e,l) in mb_test:
+        for (idxs,e,l) in mb_test:
             # prepare input
             data_dict = lstm.data_dict(e,l)
             for k,v in data_dict.iteritems():
