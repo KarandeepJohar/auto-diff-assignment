@@ -1,6 +1,7 @@
 """
 Multilayer Perceptron for character level entity classification
 """
+import argparse
 import time
 import numpy as np
 from xman import *
@@ -112,14 +113,24 @@ class MLP(Network):
         return dataDict
 
 if __name__=='__main__':
-    epochs = 20
-    max_len = 10
-    num_hid = 50
-    batch_size = 16
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--max_len', dest='max_len', type=int, default=10)
+    parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
+    parser.add_argument('--batch_size', dest='batch_size', type=int, default=16)
+    parser.add_argument('--dataset', dest='dataset', type=str, default='tiny')
+    parser.add_argument('--epochs', dest='epochs', type=int, default=20)
+    parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
+    params = vars(parser.parse_args())
+    epochs = params['epochs']
+    max_len = params['max_len']
+    num_hid = params['num_hid']
+    batch_size = params['batch_size']
+    dataset = params['dataset']
+    init_lr = params['init_lr']
 
     # load data and preprocess
     dp = DataPreprocessor()
-    data = dp.preprocess('../data/smaller.train', '../data/smaller.test')
+    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.test'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
@@ -137,12 +148,14 @@ if __name__=='__main__':
 
     # train
     print "training..."
-    logger = open('../logs/auto_mlp.txt','w')
+    logger = open('../logs/%s_mlp_L%d_H%d_B%d_E%d_lr%.3f.txt'%
+            (dataset,max_len,num_hid,batch_size,epochs,init_lr),'w')
     tst = time.time()
     value_dict = mlp.graph.inputDict()
+    max_prec = 0.
     for i in range(epochs):
         # learning rate schedule
-        lr = 0.5/((i+1)**2)
+        lr = init_lr/((i+1)**2)
 
         for (e,l) in mb_train:
             # prepare input
@@ -172,9 +185,11 @@ if __name__=='__main__':
             targets.append(l)
             n += 1
         prec = evaluate(np.vstack(probs), np.vstack(targets))
+        if prec>max_prec: max_prec = prec
 
         t_elap = time.time()-tst
-        message = 'Epoch %d VAL loss = %.3f prec = %.3f time = %.2f' % (i,tot_loss/n,prec,t_elap)
+        message = ('Epoch %d VAL loss %.3f prec %.3f max_prec %.3f time %.2f' % 
+                (i,tot_loss/n,prec,max_prec,t_elap))
         logger.write(message+'\n')
         print message
     print "done"
