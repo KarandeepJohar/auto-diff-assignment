@@ -1,11 +1,19 @@
 import io
 import numpy as np
-
+import urllib
+USE_ASCII = True
+if USE_ASCII:
+    from unidecode import unidecode
 def evaluate(probs, targets):
     # compute precision @1
     preds = np.argmax(probs, axis=1)
     return float((targets[np.arange(targets.shape[0]),preds]==1).sum())/ \
             targets.shape[0]
+def clean(x):
+    if USE_ASCII:
+        return unidecode(urllib.unquote(str(x)).decode('utf8'))
+    else:
+        return urllib.unquote(str(x)).decode('utf8')
 
 class Data:
     def __init__(self, training, test, chardict, labeldict):
@@ -37,12 +45,12 @@ class DataPreprocessor:
         label_set = set()
         ftrain = io.open(train_file, 'r')
         for line in ftrain:
-            entity, label = line.rstrip().split('\t')[:2]
+            entity, label = map(clean, line.rstrip().split('\t')[:2])
             train_set |= set(list(entity))
             label_set |= set(label.split(','))
         ftest = io.open(test_file, 'r')
         for line in ftest:
-            entity, label = line.rstrip().split('\t')[:2]
+            entity, label = map(clean, line.rstrip().split('\t')[:2])
             test_set |= set(list(entity))
             label_set |= set(label.split(','))
         
@@ -70,7 +78,8 @@ class DataPreprocessor:
         # original file before shuffling and randomization
         idx = 0
         for line in fin:
-            entity, label = line.rstrip().split('\t')[:2]
+            entity, label = map(clean, line.rstrip().split('\t')[:2])
+            print entity
             ent = map(lambda c:chardict[c], list(entity))
             lab = map(lambda l:labeldict[l], label.split(','))
             examples.append((idx, ent, lab))
