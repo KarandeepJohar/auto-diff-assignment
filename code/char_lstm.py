@@ -16,10 +16,11 @@ EPS = 1e-4
 # some test cases
 #
 
-def _grad_check(network, data, params):
-    print "Checking gradients"
-    data.update(params)
-    fd = network.fwd(data)
+def grad_check(network):
+    # function which takes a network object and checks gradients
+    # based on default values of data and params
+    dataParamDict = network.graph.inputDict()
+    fd = network.fwd(dataParamDict)
     grads = network.bwd(fd)
     for rname in grads:
         if network.graph.isParam(rname):
@@ -32,16 +33,16 @@ def _grad_check(network, data, params):
             fd[rname].ravel()[0] += EPS
             auto = grads[rname].ravel()[0]
             num = (a-b)/(2*EPS)
+            print '%s Auto %.5f Num %.5f' % (rname, auto, num)
             if not np.isclose(auto, num, atol=1e-3):
                 raise ValueError("gradients not close for %s, Auto %.5f Num %.5f"
                         % (rname, auto, num))
-    print "Gradients OK"
 
 
 class Network:
     """
     Parent class with functions for doing forward and backward passes through the network, and
-    checking gradients. All networks should subclass this.
+    applying updates. All networks should subclass this.
     """
     def display(self):
         for o in self.graph.operationSequence(self.graph.loss):
@@ -68,53 +69,46 @@ class Network:
 
 class LSTM(Network):
 
-    def __init__(self, L):
+    def __init__(self, L, in_size, num_hid, out_size):
+        self.in_size = in_size
+        self.num_hid = num_hid
+        self.out_size = out_size
         self.length = L
         self._declareParams()
         self._declareInputs()
         self.build()
 
     def _declareParams(self):
-        # suffixes = []
-        # names = ["W"+str(i) for i in range(1,4)]+ ["b"+str(i) for i in range(1,4)]
-        # self.params = {k:f.param(name=k) for k in names}
+        scW = glorot(self.in_size,self.num_hid)
+        scU = glorot(self.num_hid,self.num_hid)
+        scb = 0.1
         self.params = {}
-        self.params['Wi'] = f.param()
-        self.params['Wi'].name = 'Wi'
-        self.params['Ui'] = f.param()
-        self.params['Ui'].name = 'Ui'
-        self.params['bi'] = f.param()
-        self.params['bi'].name = 'bi'
-        self.params['Wf'] = f.param()
-        self.params['Wf'].name = 'Wf'
-        self.params['Uf'] = f.param()
-        self.params['Uf'].name = 'Uf'
-        self.params['bf'] = f.param()
-        self.params['bf'].name = 'bf'
-        self.params['Wo'] = f.param()
-        self.params['Wo'].name = 'Wo'
-        self.params['Uo'] = f.param()
-        self.params['Uo'].name = 'Uo'
-        self.params['bo'] = f.param()
-        self.params['bo'].name = 'bo'
-        self.params['Wc'] = f.param()
-        self.params['Wc'].name = 'Wc'
-        self.params['Uc'] = f.param()
-        self.params['Uc'].name = 'Uc'
-        self.params['bc'] = f.param()
-        self.params['bc'].name = 'bc'
-        self.params['W1'] = f.param()
-        self.params['W1'].name = 'W1'
-        self.params['b1'] = f.param()
-        self.params['b1'].name = 'b1'
+        for suf in ['i','f','o','c']:
+            self.params['W'+suf] = f.param(name='W'+suf,
+                    default=scW*np.random.uniform(low=-1.,high=1.,
+                        size=(self.in_size,self.num_hid)))
+            self.params['U'+suf] = f.param(name='U'+suf,
+                    default=scU*np.random.uniform(low=-1.,high=1.,
+                        size=(self.num_hid,self.num_hid)))
+            self.params['b'+suf] = f.param(name='b'+suf,
+                    default=scb*np.random.uniform(low=-1.,high=1.,
+                        size=(self.num_hid,)))
+        sc = glorot(self.num_hid,self.out_size)
+        self.params['W1'] = f.param(name='W1', 
+                default=sc*np.random.uniform(low=-1.,high=1.,size=(self.num_hid,self.out_size)))
+        self.params['b1'] = f.param(name='b1', 
+                default=scb*np.random.uniform(low=-1.,high=1.,size=(self.out_size,)))
 
     def _declareInputs(self):
         self.inputs = {}
         for i in range(self.length):
-            self.inputs['input_%d'%i] = f.input()
-            self.inputs['input_%d'%i].name = 'input_%d'%i
-        self.inputs['y'] = f.input()
-        self.inputs['y'].name = 'y'
+            self.inputs['input_%d'%i] = f.input(name='input_%d'%i, 
+                    default=np.random.rand(1,self.in_size))
+        self.inputs['y'] = f.input(name='y', default=np.random.rand(1,self.out_size))
+        self.inputs['hid_init'] = f.input(name='hid_init', 
+                default=np.zeros((1,self.num_hid)))
+        self.inputs['cell_init'] = f.input(name='cell_init', 
+                default=np.zeros((1,self.num_hid)))
 
     @staticmethod
     def _step(t_in, hid, cell, params):
@@ -136,10 +130,8 @@ class LSTM(Network):
     def build(self):
         x = XMan()
         # evaluating the model
-        x.hid_init = f.input()
-        x.cell_init = f.input()
-        hh = x.hid_init
-        cc = x.cell_init
+        hh = self.inputs['hid_init']
+        cc = self.inputs['cell_init']
         for i in range(self.length):
             hh, cc = LSTM._step(self.inputs['input_%d'%i], hh, cc, self.params)
         x.o1 = f.relu( f.mul(hh,self.params['W1']) + self.params['b1'] )
@@ -148,37 +140,15 @@ class LSTM(Network):
         x.loss = f.mean(f.crossEnt(x.output, self.inputs['y']))
         self.graph = x.setup()
         self.display()
-        # check
-        params = self.init_params(2,2,2)
-        data = self.data_dict()
-        _grad_check(self, data, params)
 
-    def data_dict(self):
+    def data_dict(self, X, y):
         data = {}
         for i in range(self.length):
-            data['input_%d'%i] = np.random.rand(5,2)
-        data['y'] = np.random.rand(5,2)
-        data['hid_init'] = np.random.rand(5,2)
-        data['cell_init'] = np.random.rand(5,2)
+            data['input_%d'%i] = X[:,i,:]
+        data['y'] = y
+        data['hid_init'] = np.zeros((X.shape[0],self.num_hid))
+        data['cell_init'] = np.zeros((X.shape[0],self.num_hid))
         return data
-
-    def init_params(self, in_size, num_hidden, out_size):
-        paramDict = {}
-        paramDict['Wi'] = np.random.rand(in_size, num_hidden)
-        paramDict['Ui'] = 0.02*np.random.rand(num_hidden, num_hidden)
-        paramDict['bi'] = np.random.rand(num_hidden)
-        paramDict['Wo'] = np.random.rand(in_size, num_hidden)
-        paramDict['Uo'] = 0.02*np.random.rand(num_hidden, num_hidden)
-        paramDict['bo'] = np.random.rand(num_hidden)
-        paramDict['Wf'] = np.random.rand(in_size, num_hidden)
-        paramDict['Uf'] = 0.02*np.random.rand(num_hidden, num_hidden)
-        paramDict['bf'] = np.random.rand(num_hidden)
-        paramDict['Wc'] = np.random.rand(in_size, num_hidden)
-        paramDict['Uc'] = 0.02*np.random.rand(num_hidden, num_hidden)
-        paramDict['bc'] = np.random.rand(num_hidden)
-        paramDict['W1'] = 0.02*np.random.rand(num_hidden, out_size)
-        paramDict['b1'] = np.random.rand(out_size)
-        return paramDict
 
 def scale(m):
     return 0.01
@@ -189,11 +159,10 @@ def glorot(m,n):
 
 class MLP(Network):
 
-    def __init__(self, max_len, layer_sizes):
-        self.max_len = max_len
+    def __init__(self, layer_sizes):
         self.num_layers = len(layer_sizes)-1
         self._declareParams(layer_sizes)
-        self._declareInputs()
+        self._declareInputs(layer_sizes)
         self._build()
 
     def _declareParams(self, layer_sizes):
@@ -205,10 +174,11 @@ class MLP(Network):
             self.params['W'+str(k)] = f.param(name='W'+str(k), default=sc*np.random.rand(layer_sizes[i], layer_sizes[i+1]))
             self.params['b'+str(k)] = f.param(name='b'+str(k), default=sc*np.random.rand(layer_sizes[i+1]))
             
-    def _declareInputs(self):
+    def _declareInputs(self, layer_sizes):
+        # set defaults for gradient check
         self.inputs = {}
-        self.inputs['X'] = f.input(name='X')
-        self.inputs['y'] = f.input(name='y')
+        self.inputs['X'] = f.input(name='X', default=np.random.rand(1,layer_sizes[0]))
+        self.inputs['y'] = f.input(name='y', default=np.random.rand(1,layer_sizes[-1]))
 
     def _build(self):
         x = XMan()
@@ -327,9 +297,12 @@ def entityMLP(train, test, num_chars, max_len, num_hid):
     epochs = 20
 
     print "building mlp..."
-    mlp = MLP(max_len,[max_len*num_chars, 40, train.num_labels])
+    mlp = MLP([max_len*num_chars, num_hid, train.num_labels])
     print "done"
-    # check
+    # grad check
+    paramDict = mlp.graph.inputDict()
+    print paramDict['W1']
+    grad_check(mlp, paramDict)
     #params = mlp.init_params(2,2)
     #data = mlp.data_dict(np.random.rand(5,2),np.random.rand(5,2))
     #_grad_check(mlp, data, params)
@@ -373,31 +346,33 @@ def entityMLP(train, test, num_chars, max_len, num_hid):
         print message
 
 def entityLSTM(train, test, num_chars, max_len, num_hid):
-    epochs = 50
+    epochs = 20
 
     print "building lstm..."
-    lstm = LSTM(max_len)
+    lstm = LSTM(max_len, num_chars, num_hid, train.num_labels)
     print "done"
-    dataParamDict = lstm.init_params(num_chars, num_hid, train.num_labels)
+    print "checking gradients..."
+    grad_check(lstm)
+    print "ok"
+    value_dict = lstm.graph.inputDict()
     print "training..."
     logger = open('../logs/auto_lstm.txt','w')
+    tst = time.time()
     for i in range(epochs):
+        # learning rate schedule
+        lr = 0.5/((i+1)**2)
+
         for (e,l) in train:
             # prepare input
-            for j in range(lstm.length):
-                #dataParamDict['input_%d'%j] = np.zeros((e.shape[0],num_chars))
-                #dataParamDict['input_%d'%j][np.arange(e.shape[0]),e[:,j]] = 1
-                dataParamDict['input_%d'%j] = e[:,j,:]
-            dataParamDict['y'] = l
-            dataParamDict['hid_init'] = np.zeros((e.shape[0], num_hid))
-            dataParamDict['cell_init'] = np.zeros((e.shape[0], num_hid))
+            data_dict = lstm.data_dict(e,l)
+            for k,v in data_dict.iteritems():
+                value_dict[k] = v
             # fwd-bwd
-            vd = lstm.fwd(dataParamDict)
-            gd = lstm.bwd(dataParamDict)
-            dataParamDict = lstm.update(dataParamDict, gd, 0.1)
+            vd = lstm.fwd(value_dict)
+            gd = lstm.bwd(value_dict)
+            value_dict = lstm.update(value_dict, gd, 0.1)
             message = 'TRAIN loss = %.3f' % vd['loss']
             logger.write(message+'\n')
-            print message
 
         # validate
         tot_loss, n= 0., 0
@@ -405,15 +380,11 @@ def entityLSTM(train, test, num_chars, max_len, num_hid):
         targets = []
         for (e,l) in test:
             # prepare input
-            for j in range(lstm.length):
-                #dataParamDict['input_%d'%j] = np.zeros((e.shape[0],num_chars))
-                #dataParamDict['input_%d'%j][np.arange(e.shape[0]),e[:,j]] = 1
-                dataParamDict['input_%d'%j] = e[:,j,:]
-            dataParamDict['y'] = l
-            dataParamDict['hid_init'] = np.zeros((e.shape[0], num_hid))
-            dataParamDict['cell_init'] = np.zeros((e.shape[0], num_hid))
+            data_dict = lstm.data_dict(e,l)
+            for k,v in data_dict.iteritems():
+                value_dict[k] = v
             # fwd
-            vd = lstm.fwd(dataParamDict)
+            vd = lstm.fwd(value_dict)
             tot_loss += vd['loss']
             probs.append(vd['output'])
             targets.append(l)
@@ -436,8 +407,8 @@ if __name__ == "__main__":
     mb_test = MinibatchLoader(data.test, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
 
-    #entityLSTM(mb_train, mb_test, len(data.chardict), max_len, num_hid)
-    entityMLP(mb_train, mb_test, len(data.chardict), max_len, num_hid)
+    entityLSTM(mb_train, mb_test, len(data.chardict), max_len, num_hid)
+    #entityMLP(mb_train, mb_test, len(data.chardict), max_len, num_hid)
     # generate random training data labeled with dot product with random weights,
     # weights and features scaled to +1 -1
     # def generateData(numExamples,numDims):

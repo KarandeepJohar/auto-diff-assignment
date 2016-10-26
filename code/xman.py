@@ -200,7 +200,7 @@ class XMan(object):
         """
         result = kw.copy()
         for regName,reg in self._registers.items():
-            if not regName in result and reg.default!=None:
+            if not regName in result and reg.default is not None:
                 result[regName] = reg.default
         return result
 

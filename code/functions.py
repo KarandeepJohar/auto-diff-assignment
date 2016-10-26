@@ -50,8 +50,7 @@ def _softMax(x):
     return dist
 
 def _crossEnt(x,y):
-    EPSILON = 10e-5
-    log_x = np.log(x + EPSILON)
+    log_x = np.nan_to_num(np.log(x))
     return - np.multiply(y,log_x).sum(axis=1, keepdims=True)
 
 EVAL_FUNS = {
@@ -101,7 +100,7 @@ BP_FUNS = {
     'mul':              [_derivDot1, _derivDot2],
     'mean':             [lambda delta,out,x : delta * 1.0/float(x.shape[0])*np.ones(x.shape)],
     'square':           [lambda delta,out,x : delta * 2.0 * x],
-    'crossEnt-softMax': [lambda delta,out,x,y: delta*(_softMax(x)*y.sum(axis=1)[:,None] - y),  lambda delta,out,x,y:-delta*x*y],  #second one is never used for much
+    'crossEnt-softMax': [lambda delta,out,x,y: delta*(_softMax(x)*y.sum(axis=1)[:,None] - y),  lambda delta,out,x,y:-delta*np.log(_softMax(x))],  #second one is never used for much
     'tanh':             [lambda delta,out,x : delta * (1.0 - np.square(out))],
     'relu':             [lambda delta,out,x : delta * ((x>0).astype(np.float64))],
     'sigmoid':          [lambda delta,out,x : delta * out * (1.-out)],
