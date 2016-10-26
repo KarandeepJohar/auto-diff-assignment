@@ -1,7 +1,7 @@
 import io
 import numpy as np
 import urllib
-USE_ASCII = True
+USE_ASCII = False
 if USE_ASCII:
     from unidecode import unidecode
 def evaluate(probs, targets):
@@ -79,7 +79,7 @@ class DataPreprocessor:
         idx = 0
         for line in fin:
             entity, label = map(clean, line.rstrip().split('\t')[:2])
-            print entity
+            # print entity
             ent = map(lambda c:chardict[c], list(entity))
             lab = map(lambda l:labeldict[l], label.split(','))
             examples.append((idx, ent, lab))

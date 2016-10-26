@@ -112,15 +112,7 @@ class MLP(Network):
         dataDict['y'] = y
         return dataDict
 
-if __name__=='__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--max_len', dest='max_len', type=int, default=10)
-    parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
-    parser.add_argument('--batch_size', dest='batch_size', type=int, default=16)
-    parser.add_argument('--dataset', dest='dataset', type=str, default='tiny')
-    parser.add_argument('--epochs', dest='epochs', type=int, default=20)
-    parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
-    params = vars(parser.parse_args())
+def main(params):
     epochs = params['epochs']
     max_len = params['max_len']
     num_hid = params['num_hid']
@@ -130,6 +122,7 @@ if __name__=='__main__':
 
     # load data and preprocess
     dp = DataPreprocessor()
+    dataset="small"
     data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.test'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
@@ -193,3 +186,36 @@ if __name__=='__main__':
         logger.write(message+'\n')
         print message
     print "done"
+
+    tot_loss, n= 0., 0
+    probs = []
+    targets = []
+    for (idxs,e,l) in mb_test:
+        # prepare input
+        data_dict = mlp.data_dict(e.reshape((e.shape[0],e.shape[1]*e.shape[2])),l)
+        for k,v in data_dict.iteritems():
+            value_dict[k] = v
+        # fwd
+        vd = mlp.fwd(value_dict)
+        tot_loss += vd['loss']
+        probs.append(vd['output'])
+        targets.append(l)
+        n += 1
+    prec = evaluate(np.vstack(probs), np.vstack(targets))
+    if prec>max_prec: max_prec = prec
+
+    t_elap = time.time()-tst
+    message = ('Epoch %d VAL loss %.3f prec %.3f max_prec %.3f time %.2f' % 
+            (i,tot_loss/n,prec,max_prec,t_elap))
+        
+
+if __name__=='__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--max_len', dest='max_len', type=int, default=10)
+    parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
+    parser.add_argument('--batch_size', dest='batch_size', type=int, default=16)
+    parser.add_argument('--dataset', dest='dataset', type=str, default='tiny')
+    parser.add_argument('--epochs', dest='epochs', type=int, default=20)
+    parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
+    params = vars(parser.parse_args())
+    main(params)

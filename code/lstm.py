@@ -156,7 +156,7 @@ if __name__=='__main__':
     parser.add_argument('--max_len', dest='max_len', type=int, default=10)
     parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=16)
-    parser.add_argument('--dataset', dest='dataset', type=str, default='tiny')
+    parser.add_argument('--dataset', dest='dataset', type=str, default='small')
     parser.add_argument('--epochs', dest='epochs', type=int, default=20)
     parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
     params = vars(parser.parse_args())
