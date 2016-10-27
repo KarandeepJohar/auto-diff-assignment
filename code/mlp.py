@@ -7,6 +7,7 @@ import numpy as np
 from xman import *
 from utils import *
 from autograd import *
+from network import *
 
 np.random.seed(0)
 EPS = 1e-4
@@ -14,56 +15,6 @@ EPS = 1e-4
 def glorot(m,n):
     # return scale for glorot initialization
     return np.sqrt(6./(m+n))
-
-def grad_check(network):
-    # function which takes a network object and checks gradients
-    # based on default values of data and params
-    dataParamDict = network.graph.inputDict()
-    fd = network.fwd(dataParamDict)
-    grads = network.bwd(fd)
-    for rname in grads:
-        if network.graph.isParam(rname):
-            fd[rname].ravel()[0] += EPS
-            fp = network.fwd(fd)
-            a = fp['loss']
-            fd[rname].ravel()[0] -= 2*EPS
-            fm = network.fwd(fd)
-            b = fm['loss']
-            fd[rname].ravel()[0] += EPS
-            auto = grads[rname].ravel()[0]
-            num = (a-b)/(2*EPS)
-            if not np.isclose(auto, num, atol=1e-3):
-                raise ValueError("gradients not close for %s, Auto %.5f Num %.5f"
-                        % (rname, auto, num))
-
-class Network:
-    """
-    Parent class with functions for doing forward and backward passes through the network, and
-    applying updates. All networks should subclass this.
-    """
-    def display(self):
-        print "Operation Sequence:"
-        for o in self.graph.operationSequence(self.graph.loss):
-            print o
-
-    def fwd(self, valueDict):
-        ad = Autograd(self.graph)
-        opseq = self.graph.operationSequence(self.graph.loss)
-
-        return ad.eval(opseq, valueDict)
-
-    def bwd(self, valueDict):
-        ad = Autograd(self.graph)
-        opseq = self.graph.operationSequence(self.graph.loss)
-        return ad.bprop(opseq, valueDict,loss=np.float_(1.0))
-
-    def update(self, dataParamDict, grads, rate):
-        for rname in grads:
-            if self.graph.isParam(rname):
-                if grads[rname].shape!=dataParamDict[rname].shape:
-                    print rname, grads[rname].shape, dataParamDict[rname].shape
-                dataParamDict[rname] = dataParamDict[rname] - rate*grads[rname]
-        return dataParamDict
 
 class MLP(Network):
     """
@@ -119,13 +70,15 @@ def main(params):
     batch_size = params['batch_size']
     dataset = params['dataset']
     init_lr = params['init_lr']
+    output_file = params['output_file']
 
     # load data and preprocess
     dp = DataPreprocessor()
-    dataset="small"
-    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.test'%dataset)
+    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.valid'%dataset, '../data/%s.test'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
+           len(data.chardict), len(data.labeldict))
+    mb_valid = MinibatchLoader(data.validation, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
     mb_test = MinibatchLoader(data.test, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
@@ -136,7 +89,7 @@ def main(params):
     print "done"
     # check
     print "checking gradients..."
-    grad_check(mlp)
+    # grad_check(mlp)
     print "ok"
 
     # train
@@ -166,7 +119,7 @@ def main(params):
         tot_loss, n= 0., 0
         probs = []
         targets = []
-        for (idxs,e,l) in mb_test:
+        for (idxs,e,l) in mb_valid:
             # prepare input
             data_dict = mlp.data_dict(e.reshape((e.shape[0],e.shape[1]*e.shape[2])),l)
             for k,v in data_dict.iteritems():
@@ -190,6 +143,7 @@ def main(params):
     tot_loss, n= 0., 0
     probs = []
     targets = []
+    indices = []
     for (idxs,e,l) in mb_test:
         # prepare input
         data_dict = mlp.data_dict(e.reshape((e.shape[0],e.shape[1]*e.shape[2])),l)
@@ -200,7 +154,12 @@ def main(params):
         tot_loss += vd['loss']
         probs.append(vd['output'])
         targets.append(l)
+        indices.extend(idxs)
         n += 1
+    np.save(output_file, np.vstack(probs)[indices])
+    print evaluate(np.vstack(probs), np.vstack(targets))
+    print evaluate(np.load(output_file+".npy"), np.vstack(targets)[indices])
+
     prec = evaluate(np.vstack(probs), np.vstack(targets))
     if prec>max_prec: max_prec = prec
 
@@ -213,9 +172,10 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--max_len', dest='max_len', type=int, default=10)
     parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
-    parser.add_argument('--batch_size', dest='batch_size', type=int, default=16)
+    parser.add_argument('--batch_size', dest='batch_size', type=int, default=10)
     parser.add_argument('--dataset', dest='dataset', type=str, default='tiny')
-    parser.add_argument('--epochs', dest='epochs', type=int, default=20)
+    parser.add_argument('--epochs', dest='epochs', type=int, default=5)
     parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
+    parser.add_argument('--output_file', dest='output_file', type=str, default='output')
     params = vars(parser.parse_args())
     main(params)
