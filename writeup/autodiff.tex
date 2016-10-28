@@ -2,6 +2,8 @@
 \usepackage{epsfig}
 \usepackage{url}
 \usepackage{verbatim}
+\usepackage{amsmath}
+\usepackage{amsfonts}
 
 \newcommand{\wc}[1]{\textit{todo: #1}}
 \newcommand{\ct}[1]{\textit{cite: #1}}
@@ -495,6 +497,155 @@ traversal of the data structure to create a Wengert list.
 
 \wc{more hints: return delta[z]*d, to you can do the matrix-vector
   thing; sometimes output is used in derivatives.}
+
+In this assignment you will use the automatic differentiation system described above
+to implement two neural network architectures for character level entity classification. You 
+will use \texttt{python} and \texttt{numpy} for this assigment.
+The architectures you will implement are:
+\begin{itemize}
+    \item A three-layer feedforward network or Multilayer Perceptron (MLP)
+    \item A Long Short Term Memory (LSTM) network followed by a feedforward network
+\end{itemize}
+
+Character level entity classification refers to determining the type of an entity 
+given the characters which appear in its name as features. For example, given the name
+``\cd{Noahshire}" you might guess that it is a \cd{Location}, and given the name
+``\cd{Grebulons}"\footnote{\url{https://en.wikipedia.org/wiki/List_of_races_and_species_in_The_Hitchhiker\%27s_Guide_to_the_Galaxy#Grebulons}} you might guess that it is a \cd{Species}. 
+Both of these are not real entities but highlight the possibility of using characters to classify entity types.
+
+\section{Neural Networks}
+\subsection{Mutlilayer Perceptron}
+MLPs are the simplest neural network architecture consisting of multiple layers, each of 
+which apply a linear transformation followed by non-linear mapping to their inputs:
+\begin{align*}
+    o_i &= f(\sum_{j=1}^{d_{in}} w_{ij} x_j + b_i) \\
+            &= f(\mathbf{x}^T \mathbf{w_i} + b_i)
+\end{align*}
+Here $\mathbf{x} \in \mathbb{R}^{d_{in}}$ is the layer input and $o_i \in \mathbb{R}$ is the 
+$i$-th output of the layer. $\mathbf{w_i}$, $b_i$ are layer parameters which we will optimize
+during learning. The number of outputs at each layer is called the \textit{dimension}
+of that layer and we denote it by $d_{out}$. We would like to use vector/matrix multiplications 
+wherever possible to utilize their fast implementation in \texttt{numpy}, and combine the above
+for all $i$ as:
+\begin{equation*}
+    \mathbf{o} = f(\mathbf{x}^T W + \mathbf{b})^T
+\end{equation*}
+$W=[w_1,w_2,\ldots,w_{d_{out}}] \in \mathbb{R}^{d_{in} \times d_{out}}$ stacks all the weight vectors 
+horizontally, and $\mathbf{b} \in \mathbb{R}^{d_{out}}$ holds all the biases. The non-linearity $f$ is
+applied elementwise.
+
+To further speed-up the computation we can process a minibatch of inputs together. Let $X \in \mathbb{R}^{d_{in} \times N}$
+be a matrix holding $N$ examples column-wise. We can compute the layer outputs for all of these together:
+\begin{equation}
+    O = f(X^T W + B)^T
+\end{equation}
+$B = \mathbf{1} \otimes \mathbf{b}^T \in \mathbb{R}^{N \times d_{out}}$ is a ``broadcasted" version of the bias
+of appropriate dimensions. For this assigment you will use \cd{numpy} for all matrix operations, which takes care
+of broadcasting automatically (see here\footnote{\url{https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html}}
+for details), hence we can use the vector $\mathbf{b}$ directly:
+\begin{verbatim}
+import numpy as np
+Y = np.dot(X.transpose(), W) + b
+O = elemwise_nonlinear_func(Y).transpose()
+\end{verbatim}
+
+In this assigment the nonlinearity we will use is the \texttt{Rectified Linear Unit (ReLU)}:
+\begin{equation*}
+    f(x) = 
+    \begin{cases}
+        x &\quad x>0 \\
+        0 &\quad x\leq0
+    \end{cases}
+\end{equation*}
+For vectors the nonlinearity is applied element-wise, and we can again use numpy broadcasting for
+this:
+\begin{verbatim}
+def relu(X):
+    return np.maximum(0,X) # X can be arbitrary shape
+\end{verbatim}
+
+We can set the size of the last layer of the MLP to produce a vector the same size as the number of
+labels $L$ in our dataset. The operations described thus far map inputs to positive reals, but for 
+classification tasks we are interested 
+in obtaining a \textit{distribution} over class labels. This is usually done by
+passing the output of MLP through a \texttt{softmax} layer:
+\begin{equation}
+    \label{eq:softmax}
+    p_j = \frac{e^{o_j}}{\sum_{j'=1}^L e^{o_{j'}}}
+\end{equation}
+Note that $\mathbf{p}$ defines a valid distribution, and elements of $\mathbf{o}$ which have a
+high relative value will have a high probability in $\mathbf{p}$. The above equation computes
+$\mathbf{p}$ for a single $\mathbf{o}$, but in your code you should use \texttt{numpy}
+operations to compute a minibatch of distributions $P$ from a minibatch of outputs $O$.
+
+Lastly, we need to define a loss function which measures how far the distributions $P$ output from our network are from 
+the target distributions $T$. We will use the cross-entropy loss for this:
+\begin{equation}
+    \label{eq:xentropy}
+    J = - \frac{1}{N} \sum_{i=1}^N \sum_{j=1}^L T_{ij} \log P_{ij}
+\end{equation}
+Now we can take gradients of $J$ wrt to the parameters of the network and perform
+Stochastic Gradient Descent (SGD).
+
+To summarize, the first architecture you will implement for this assignment consists of an MLP
+with one hidden layer, followed by a softmax layer \ref{eq:softmax} and cross-entropy loss 
+\ref{eq:xentropy}.
+Given an input $X$ and their associated targets $T$, the output is computed as:
+\begin{align*}
+    O^1 &= \text{relu}(X^T W^1 + \mathbf{b}^1) \\
+    Y &= \text{relu}({O^1}^T W^2 + \mathbf{b}^2) \\
+    P &= \text{softmax}(Y) \\
+    J &= \text{cross-entropy}(T,P)
+\end{align*}
+
+\subsection{Long Short Term Memory}
+The MLP is a powerful model -- with enough hidden units it can approximate any output, but it is not the most appropriate
+model when the input is a sequence. For sequences, the input size of the MLP and consequently size of $W^1$, will
+increase linearly with the size of the length of the sequence and might get prohibitively large. Instead, we would 
+like to have a model which can loop over the input sequence, and starting from an initial state iteratively 
+updates this state based on the input at that time step. LSTMs are one example of such a model
+\footnote{An excellent introduction to LSTMs can be found at \url{http://colah.github.io/posts/2015-08-Understanding-LSTMs/}}.
+
+Lets say we have a sequence of inputs $x_1,x_2,\ldots,x_M \in \mathbb{R}^{d_{in}}$, an initial \textit{cell state} $c_0 \in \mathbb{R}^{d_{out}}$ and an initial \textit{output}
+$h_0 \in \mathbb{R}^{d_{out}}$. At time $t$ the LSTM does the following updates:
+\begin{align*}
+    i_t &= \sigma(x_t^T W_{i} + h_{t-1}^T U_{i} + b_{i})\\
+    f_t &= \sigma(x_t^T W_{f} + h_{t-1}^T U_{f} + b_{f})\\
+    o_t &= \sigma(x_t^T W_{o} + h_{t-1}^T U_{o} + b_{o})\\
+    \tilde{c}_t &= tanh(x_t^T W_{c} + h_{t-1}^T U_{c} + b_{c})\\
+    c_t &= f_t \odot c_{t-1} + i_t \odot \tilde{c}_t\\
+    h_t &= o_t \odot tanh(c_t)
+\end{align*}
+Here $W_* \in \mathbb{R}^{d_{in} \times d_{out}}$, $U_* \in \mathbb{R}^{d_{out} \times d_{out}}$, $b_* \in \mathbb{R}^{d_{out}}$ 
+are parameters, $\odot$ is an element-wise product and $\sigma$ is the sigmoid function:
+\begin{equation}
+    \sigma(x) = \frac{1}{1+ e^{-x}}
+\end{equation}
+Suppose we have a function \texttt{\_step} which takes $x_t$, $h_{t-1}$, $c_{t-1}$ and all the parameters
+$W_*$, $U_*$, $B_*$ as input and returns $h_t$, $c_t$
+ then the LSTM can be implemented as:
+\begin{verbatim}
+import numpy as np
+def LSTM(x, params):
+    h = np.zeros(d_out)
+    c = np.zeros(d_out)
+    for t=[1,2,...M]:
+        h, c = _step(x[:,t], h, c, params)
+    return h
+\end{verbatim}
+Where we assume \texttt{x} has the shape $d_{in} \times M$, i.e. each column holds the input for a particular $t$.
+\textbf{Note:} The above equations are shown for single inputs $x$ for clarity. In your implementation you must use
+minibatches $X$ of $N$ examples at a time, the same way as we did for the MLP. This would amount 
+
+Now we are ready to implement the second architecture for this assignment. We will replace the hidden layer for MLP
+in the previous section with an LSTM layer. hence the computation would be as follows:
+\begin{align*}
+    O^1 &= \text{LSTM}(X, \text{params}) \\
+    Y &= \text{relu}({O^1}^T W^2 + \mathbf{b}^2) \\
+    P &= \text{softmax}(Y) \\
+    J &= \text{cross-entropy}(T,P)
+\end{align*}
+Where \texttt{params} is an object (python dictionary, for example) containing all the LSTM parameters.
 
 \section{Data}
 
