@@ -1,57 +1,73 @@
 import io
 import numpy as np
+import urllib
 
 def evaluate(probs, targets):
     # compute precision @1
     preds = np.argmax(probs, axis=1)
     return float((targets[np.arange(targets.shape[0]),preds]==1).sum())/ \
             targets.shape[0]
+def clean(x):
+    return urllib.unquote(str(x)).decode('utf8').strip()
 
 class Data:
-    def __init__(self, training, test, chardict, labeldict):
+    def __init__(self, training, validation, test, chardict, labeldict):
         self.chardict = chardict
         self.labeldict = labeldict
         self.training = training
         self.test = test
+        self.validation = validation
 
 class DataPreprocessor:
-    def preprocess(self, train_file, test_file):
+    def preprocess(self, train_file, validation_file, test_file):
         """
         preprocess train and test files into one Data object.
         construct character dict from both
         """
-        chardict, labeldict = self.make_dictionary(train_file, test_file)
+        chardict, labeldict = self.make_dictionary(train_file, validation_file, test_file)
         print 'preparing training data'
         training = self.parse_file(train_file, chardict, labeldict)
+        
+        print 'preparing validation data'
+        validation = self.parse_file(validation_file, chardict, labeldict)
+
         print 'preparing test data'
         test = self.parse_file(test_file, chardict, labeldict)
 
-        return Data(training, test, chardict, labeldict)
+        return Data(training, validation, test, chardict, labeldict)
 
-    def make_dictionary(self, train_file, test_file):
+    def make_dictionary(self, train_file, validation_file, test_file):
         """
         go through train and test data and get character and label vocabulary
         """
         print 'constructing vocabulary'
-        train_set, test_set = set(), set()
+        train_set, test_set, valid_set = set(), set(), set()
         label_set = set()
         ftrain = io.open(train_file, 'r')
         for line in ftrain:
-            entity, label = line.rstrip().split('\t')[:2]
+            entity, label = map(clean, line.rstrip().split('\t')[:2])
             train_set |= set(list(entity))
             label_set |= set(label.split(','))
+
+        fvalid = io.open(train_file, 'r')
+        for line in fvalid:
+            entity, label = map(clean, line.rstrip().split('\t')[:2])
+            valid_set |= set(list(entity))
+            label_set |= set(label.split(','))
+
         ftest = io.open(test_file, 'r')
         for line in ftest:
-            entity, label = line.rstrip().split('\t')[:2]
+            entity, label = map(clean, line.rstrip().split('\t')[:2])
             test_set |= set(list(entity))
-            label_set |= set(label.split(','))
+            # label_set |= set(label.split(','))
         
         print '# chars in training ', len(train_set)
+        print '# chars in validation ', len(valid_set)
         print '# chars in testing ', len(test_set)
-        print '# chars in (testing-training) ', len(test_set-train_set)
+        print '# chars in (testing-training-validation) ', len(test_set-train_set-valid_set)
         print '# labels', len(label_set)
 
-        vocabulary = list(train_set | test_set)
+        vocabulary = list(train_set | test_set | valid_set)
         vocab_size = len(vocabulary)
         chardict = dict(zip(vocabulary, range(1,vocab_size+1)))
         chardict[u' '] = 0
@@ -66,12 +82,18 @@ class DataPreprocessor:
         """
         examples = []
         fin = io.open(infile, 'r')
-        for line in fin:
-            entity, label = line.rstrip().split('\t')[:2]
+        # idx is for the index of the row in the 
+        # original file before shuffling and randomization
+        idx = 0
+        for line in fin:                
+            entity, label = map(clean, line.rstrip().split('\t')[:2])
+            # print entity
             ent = map(lambda c:chardict[c], list(entity))
-            lab = map(lambda l:labeldict[l], label.split(','))
-            examples.append((ent, lab))
+            lab = map(lambda l:labeldict[l] if l in labeldict else 0, label.split(','))
+            examples.append((idx, ent, lab))
+            idx += 1
         fin.close()
+        print "num_rows:", len(examples), " index", idx
         return examples
 
 class MinibatchLoader:
@@ -95,22 +117,33 @@ class MinibatchLoader:
 
     def next(self):
         """ get next batch of examples """
-        if self.ptr>self.num_examples-self.batch_size:
+        if self.ptr >= self.num_examples:
             self.reset()
             raise StopIteration()
+        batch_size = self.batch_size
+        if self.ptr>self.num_examples-self.batch_size:
+            batch_size = self.num_examples-self.ptr
 
-        ixs = range(self.ptr,self.ptr+self.batch_size)
-        self.ptr += self.batch_size
+        ixs = range(self.ptr,self.ptr+batch_size)
+        self.ptr += batch_size
 
-        e = np.zeros((self.batch_size, self.max_len, 
+        i = np.zeros((batch_size), dtype='int32')
+        e = np.zeros((batch_size, self.max_len, 
             self.num_chars), dtype='int32') # entity
-        l = np.zeros((self.batch_size, self.num_labels), dtype='int32') # labels
+        l = np.zeros((batch_size, self.num_labels), dtype='int32') # labels
         for n, ix in enumerate(ixs):
-            ent, lab = self.examples[self.permutation[ix]]
+            idx, ent, lab = self.examples[self.permutation[ix]]
             le = min(len(ent),self.max_len)
+            i[n] = idx
             e[n,np.arange(le),ent[:le]] = 1
             #e[n,:min(len(ent),self.max_len)] = np.array(ent[:self.max_len])
             l[n,lab] = 1
 
-        return e, l
+        return i, e, l
+
+if __name__ == '__main__':
+    dataset = "tiny"
+    with open("../data/%s.test"%(dataset), "r") as r, open("../data/%s.valid"%(dataset),"w") as w:
+        for line in r.readlines():
+            w.write(line)
 

@@ -1,5 +1,3 @@
-# TorchURE: Torch-like Utilities Redesigned for Education
-
 # Expression manager.  You can subclass this to defined a network
 # architecture, eg
 #

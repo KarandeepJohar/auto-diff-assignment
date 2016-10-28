@@ -7,6 +7,7 @@ import numpy as np
 from xman import *
 from utils import *
 from autograd import *
+from network import *
 
 np.random.seed(0)
 EPS = 1e-4
@@ -14,56 +15,6 @@ EPS = 1e-4
 def glorot(m,n):
     # return scale for glorot initialization
     return np.sqrt(6./(m+n))
-
-def grad_check(network):
-    # function which takes a network object and checks gradients
-    # based on default values of data and params
-    dataParamDict = network.graph.inputDict()
-    fd = network.fwd(dataParamDict)
-    grads = network.bwd(fd)
-    for rname in grads:
-        if network.graph.isParam(rname):
-            fd[rname].ravel()[0] += EPS
-            fp = network.fwd(fd)
-            a = fp['loss']
-            fd[rname].ravel()[0] -= 2*EPS
-            fm = network.fwd(fd)
-            b = fm['loss']
-            fd[rname].ravel()[0] += EPS
-            auto = grads[rname].ravel()[0]
-            num = (a-b)/(2*EPS)
-            if not np.isclose(auto, num, atol=1e-3):
-                raise ValueError("gradients not close for %s, Auto %.5f Num %.5f"
-                        % (rname, auto, num))
-
-class Network:
-    """
-    Parent class with functions for doing forward and backward passes through the network, and
-    applying updates. All networks should subclass this.
-    """
-    def display(self):
-        print "Operation Sequence:"
-        for o in self.graph.operationSequence(self.graph.loss):
-            print o
-
-    def fwd(self, valueDict):
-        ad = Autograd(self.graph)
-        opseq = self.graph.operationSequence(self.graph.loss)
-
-        return ad.eval(opseq, valueDict)
-
-    def bwd(self, valueDict):
-        ad = Autograd(self.graph)
-        opseq = self.graph.operationSequence(self.graph.loss)
-        return ad.bprop(opseq, valueDict,loss=np.float_(1.0))
-
-    def update(self, dataParamDict, grads, rate):
-        for rname in grads:
-            if self.graph.isParam(rname):
-                if grads[rname].shape!=dataParamDict[rname].shape:
-                    print rname, grads[rname].shape, dataParamDict[rname].shape
-                dataParamDict[rname] = dataParamDict[rname] - rate*grads[rname]
-        return dataParamDict
 
 class LSTM(Network):
     """
@@ -169,20 +120,21 @@ if __name__=='__main__':
 
     # load data and preprocess
     dp = DataPreprocessor()
-    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.test'%dataset)
+    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.valid'%dataset, '../data/%s.test'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
+    mb_valid = MinibatchLoader(data.validation, batch_size, max_len, 
+           len(data.chardict), len(data.labeldict))
     mb_test = MinibatchLoader(data.test, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
-
     # build
     print "building lstm..."
     lstm = LSTM(max_len,mb_train.num_chars,num_hid,mb_train.num_labels)
     print "done"
     # check
     print "checking gradients..."
-    grad_check(lstm)
+    # grad_check(lstm)
     print "ok"
 
     # train
@@ -196,7 +148,7 @@ if __name__=='__main__':
         # learning rate schedule
         lr = init_lr/((i+1)**2)
 
-        for (e,l) in mb_train:
+        for (idxs,e,l) in mb_train:
             # prepare input
             data_dict = lstm.data_dict(e,l)
             for k,v in data_dict.iteritems():
@@ -212,7 +164,7 @@ if __name__=='__main__':
         tot_loss, n= 0., 0
         probs = []
         targets = []
-        for (e,l) in mb_test:
+        for (idxs,e,l) in mb_test:
             # prepare input
             data_dict = lstm.data_dict(e,l)
             for k,v in data_dict.iteritems():
