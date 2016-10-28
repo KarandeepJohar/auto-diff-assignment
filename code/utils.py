@@ -137,7 +137,7 @@ class MinibatchLoader:
             i[n] = idx
             e[n,np.arange(le),ent[:le]] = 1
             #e[n,:min(len(ent),self.max_len)] = np.array(ent[:self.max_len])
-            l[n,lab] = 1
+            l[n,lab] = 1/len(lab)
 
         return i, e, l
 
