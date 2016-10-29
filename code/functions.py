@@ -101,6 +101,7 @@ BP_FUNS = {
     'mean':             [lambda delta,out,x : delta * 1.0/float(x.shape[0])*np.ones(x.shape)],
     'square':           [lambda delta,out,x : delta * 2.0 * x],
     'crossEnt-softMax': [lambda delta,out,x,y: delta*(_softMax(x)*y.sum(axis=1)[:,None] - y),  lambda delta,out,x,y:-delta*np.log(_softMax(x))],  #second one is never used for much
+    'crossEnt':         [lambda delta,out,x,y: delta*((1.-y)/(1.-x)- (y/x)), lambda delta,out,x,y:delta*np.nan_to_num(np.log(1.-x)-np.log(x))],
     'tanh':             [lambda delta,out,x : delta * (1.0 - np.square(out))],
     'relu':             [lambda delta,out,x : delta * ((x>0).astype(np.float64))],
     'sigmoid':          [lambda delta,out,x : delta * out * (1.-out)],

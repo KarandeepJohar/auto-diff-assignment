@@ -7,19 +7,16 @@ class Network:
     """
     def display(self):
         print "Operation Sequence:"
-        for o in self.graph.operationSequence(self.graph.loss):
+        for o in self.op_seq:
             print o
 
     def fwd(self, valueDict):
         ad = Autograd(self.graph)
-        opseq = self.graph.operationSequence(self.graph.loss)
-
-        return ad.eval(opseq, valueDict)
+        return ad.eval(self.op_seq, valueDict)
 
     def bwd(self, valueDict):
         ad = Autograd(self.graph)
-        opseq = self.graph.operationSequence(self.graph.loss)
-        return ad.bprop(opseq, valueDict,loss=np.float_(1.0))
+        return ad.bprop(self.op_seq, valueDict,loss=np.float_(1.0))
 
     def update(self, dataParamDict, grads, rate):
         for rname in grads:

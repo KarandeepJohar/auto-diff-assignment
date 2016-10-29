@@ -1,6 +1,7 @@
 """
 Long Short Term Memory for character level entity classification
 """
+import sys
 import argparse
 import time
 import numpy as np
@@ -11,6 +12,27 @@ from network import *
 
 np.random.seed(0)
 EPS = 1e-4
+
+def grad_check(network):
+    # function which takes a network object and checks gradients
+    # based on default values of data and params
+    dataParamDict = network.graph.inputDict()
+    fd = network.fwd(dataParamDict)
+    grads = network.bwd(fd)
+    for rname in grads:
+        if network.graph.isParam(rname):
+            fd[rname].ravel()[0] += EPS
+            fp = network.fwd(fd)
+            a = fp['loss']
+            fd[rname].ravel()[0] -= 2*EPS
+            fm = network.fwd(fd)
+            b = fm['loss']
+            fd[rname].ravel()[0] += EPS
+            auto = grads[rname].ravel()[0]
+            num = (a-b)/(2*EPS)
+            if not np.isclose(auto, num, atol=1e-3):
+                raise ValueError("gradients not close for %s, Auto %.5f Num %.5f"
+                        % (rname, auto, num))
 
 def glorot(m,n):
     # return scale for glorot initialization
@@ -28,7 +50,9 @@ class LSTM(Network):
         self.length = max_len
         self._declareParams()
         self._declareInputs()
-        self.build()
+        self.graph = self.build()
+        self.op_seq = self.graph.operationSequence(self.graph.loss)
+        self.display()
 
     def _declareParams(self):
         scW = glorot(self.in_size,self.num_hid)
@@ -86,17 +110,17 @@ class LSTM(Network):
         cc = self.inputs['cell_init']
         for i in range(self.length):
             hh, cc = LSTM._step(self.inputs['input_%d'%i], hh, cc, self.params)
-        x.o1 = f.relu( f.mul(hh,self.params['W1']) + self.params['b1'] )
+        x.o10 = f.mul(hh,self.params['W1']) + self.params['b1']
+        x.o1 = f.relu( x.o10)
         x.output = f.softMax(x.o1)
         # loss
         x.loss = f.mean(f.crossEnt(x.output, self.inputs['y']))
-        self.graph = x.setup()
-        self.display()
+        return x.setup()
 
     def data_dict(self, X, y):
         data = {}
         for i in range(self.length):
-            data['input_%d'%i] = X[:,i,:]
+            data['input_%d'%i] = X[:,-i,:]
         data['y'] = y
         data['hid_init'] = np.zeros((X.shape[0],self.num_hid))
         data['cell_init'] = np.zeros((X.shape[0],self.num_hid))
@@ -107,7 +131,7 @@ if __name__=='__main__':
     parser.add_argument('--max_len', dest='max_len', type=int, default=10)
     parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=16)
-    parser.add_argument('--dataset', dest='dataset', type=str, default='tiny')
+    parser.add_argument('--dataset', dest='dataset', type=str, default='small')
     parser.add_argument('--epochs', dest='epochs', type=int, default=20)
     parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
     params = vars(parser.parse_args())
@@ -120,7 +144,7 @@ if __name__=='__main__':
 
     # load data and preprocess
     dp = DataPreprocessor()
-    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.valid'%dataset, '../data/%s.test'%dataset)
+    data = dp.preprocess('../data/%s.train.clean'%dataset, '../data/%s.valid.clean'%dataset, '../data/%s.test.clean'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
@@ -134,19 +158,18 @@ if __name__=='__main__':
     print "done"
     # check
     print "checking gradients..."
-    # grad_check(lstm)
+    grad_check(lstm)
     print "ok"
 
     # train
     print "training..."
-    logger = open('../logs/%s_lstm_L%d_H%d_B%d_E%d_lr%.3f.txt'%
+    logger = open('../logs/%s_lstm4c_L%d_H%d_B%d_E%d_lr%.3f.txt'%
             (dataset,max_len,num_hid,batch_size,epochs,init_lr),'w')
     tst = time.time()
     value_dict = lstm.graph.inputDict()
-    max_prec = 0.
+    min_loss = 1e5
+    lr = init_lr
     for i in range(epochs):
-        # learning rate schedule
-        lr = init_lr/((i+1)**2)
 
         for (idxs,e,l) in mb_train:
             # prepare input
@@ -175,12 +198,13 @@ if __name__=='__main__':
             probs.append(vd['output'])
             targets.append(l)
             n += 1
-        prec = evaluate(np.vstack(probs), np.vstack(targets))
-        if prec>max_prec: max_prec = prec
+        acc = accuracy(np.vstack(probs), np.vstack(targets))
+        c_loss = tot_loss/n
+        if c_loss<min_loss: min_loss = c_loss
 
         t_elap = time.time()-tst
-        message = ('Epoch %d VAL loss %.3f prec %.3f max_prec %.3f time %.2f' % 
-                (i,tot_loss/n,prec,max_prec,t_elap))
+        message = ('Epoch %d VAL loss %.3f min_loss %.3f acc %.3f time %.2f' % 
+                (i,c_loss,min_loss,acc,t_elap))
         logger.write(message+'\n')
         print message
     print "done"

@@ -4,9 +4,21 @@ import urllib
 
 def evaluate(probs, targets):
     # compute precision @1
+    preds = (probs>0.5)
+    tp = (preds*targets).sum()
+    fp = (preds*(1-targets)).sum()
+    tn = ((1-preds)*targets).sum()
+    fn = ((1-preds)*(1-targets)).sum()
+    prec = float(tp)/(tp+fp) if tp+fp>0 else 0.
+    recall = float(tp)/(tn+tp) if tn+fp>0 else 0.
+    f1 = 2*prec*recall/(prec+recall) if prec+recall>0 else 0.
+    return prec, recall, f1
+
+def accuracy(probs, targets):
     preds = np.argmax(probs, axis=1)
-    return float((targets[np.arange(targets.shape[0]),preds]==1).sum())/ \
-            targets.shape[0]
+    targ = np.argmax(targets, axis=1)
+    return float((preds==targ).sum())/preds.shape[0]
+
 def clean(x):
     return urllib.unquote(str(x)).decode('utf8').strip()
 
@@ -137,13 +149,19 @@ class MinibatchLoader:
             i[n] = idx
             e[n,np.arange(le),ent[:le]] = 1
             #e[n,:min(len(ent),self.max_len)] = np.array(ent[:self.max_len])
-            l[n,lab] = 1/len(lab)
+            #l[n,lab] = 1/len(lab)
+            l[n,lab] = 1
 
         return i, e, l
 
 if __name__ == '__main__':
-    dataset = "tiny"
-    with open("../data/%s.test"%(dataset), "r") as r, open("../data/%s.valid"%(dataset),"w") as w:
-        for line in r.readlines():
-            w.write(line)
+    probs = np.asarray([[0.7,0.7,0.2],[0.2,0.2,0.8]])
+    targets = np.asarray([[1,1,0],[0,1,1]])
+    #print evaluate_binary(probs,targets)
+    print evaluate(probs,targets)
+    print accuracy(probs,targets)
+    #dataset = "tiny"
+    #with open("../data/%s.test"%(dataset), "r") as r, open("../data/%s.valid"%(dataset),"w") as w:
+    #    for line in r.readlines():
+    #        w.write(line)
 

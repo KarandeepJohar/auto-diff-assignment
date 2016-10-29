@@ -12,6 +12,27 @@ from network import *
 np.random.seed(0)
 EPS = 1e-4
 
+def grad_check(network):
+    # function which takes a network object and checks gradients
+    # based on default values of data and params
+    dataParamDict = network.graph.inputDict()
+    fd = network.fwd(dataParamDict)
+    grads = network.bwd(fd)
+    for rname in grads:
+        if network.graph.isParam(rname):
+            fd[rname].ravel()[0] += EPS
+            fp = network.fwd(fd)
+            a = fp['loss']
+            fd[rname].ravel()[0] -= 2*EPS
+            fm = network.fwd(fd)
+            b = fm['loss']
+            fd[rname].ravel()[0] += EPS
+            auto = grads[rname].ravel()[0]
+            num = (a-b)/(2*EPS)
+            if not np.isclose(auto, num, atol=1e-3):
+                raise ValueError("gradients not close for %s, Auto %.5f Num %.5f"
+                        % (rname, auto, num))
+
 def glorot(m,n):
     # return scale for glorot initialization
     return np.sqrt(6./(m+n))
@@ -25,7 +46,8 @@ class MLP(Network):
         self.num_layers = len(layer_sizes)-1
         self._declareParams(layer_sizes)
         self._declareInputs(layer_sizes)
-        self._build()
+        self.graph = self._build()
+        self.op_seq = self.graph.operationSequence(self.graph.loss)
 
     def _declareParams(self, layer_sizes):
         print "INITIAZLIZING with layer_sizes:", layer_sizes
@@ -50,12 +72,13 @@ class MLP(Network):
         # evaluating the model
         inp = self.inputs['X']
         for i in range(self.num_layers):
-            inp = f.relu( f.mul(inp,self.params['W'+str(i+1)]) + self.params['b'+str(i+1)] )
+            oo = f.mul(inp,self.params['W'+str(i+1)]) + self.params['b'+str(i+1)]
+            inp = f.tanh( oo )
+
         x.output = f.softMax(inp)
         # loss
         x.loss = f.mean(f.crossEnt(x.output, self.inputs['y']))
-        self.graph = x.setup()
-        self.display()
+        return x.setup()
 
     def data_dict(self, X, y):
         dataDict = {}
@@ -74,7 +97,7 @@ def main(params):
 
     # load data and preprocess
     dp = DataPreprocessor()
-    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.valid'%dataset, '../data/%s.test'%dataset)
+    data = dp.preprocess('../data/%s.train.clean'%dataset, '../data/%s.valid.clean'%dataset, '../data/%s.test.clean'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
@@ -89,20 +112,18 @@ def main(params):
     print "done"
     # check
     print "checking gradients..."
-    # grad_check(mlp)
+    grad_check(mlp)
     print "ok"
 
     # train
     print "training..."
-    logger = open('../logs/%s_mlp_L%d_H%d_B%d_E%d_lr%.3f.txt'%
+    logger = open('../logs/%s_mlp4c_L%d_H%d_B%d_E%d_lr%.3f.txt'%
             (dataset,max_len,num_hid,batch_size,epochs,init_lr),'w')
     tst = time.time()
     value_dict = mlp.graph.inputDict()
-    max_prec = 0.
+    min_loss = 1e5
+    lr = init_lr
     for i in range(epochs):
-        # learning rate schedule
-        lr = init_lr/((i+1)**2)
-
         for (idxs,e,l) in mb_train:
             # prepare input
             data_dict = mlp.data_dict(e.reshape((e.shape[0],e.shape[1]*e.shape[2])),l)
@@ -130,12 +151,13 @@ def main(params):
             probs.append(vd['output'])
             targets.append(l)
             n += 1
-        prec = evaluate(np.vstack(probs), np.vstack(targets))
-        if prec>max_prec: max_prec = prec
+        acc = accuracy(np.vstack(probs), np.vstack(targets))
+        c_loss = tot_loss/n
+        if c_loss<min_loss: min_loss = c_loss
 
         t_elap = time.time()-tst
-        message = ('Epoch %d VAL loss %.3f prec %.3f max_prec %.3f time %.2f' % 
-                (i,tot_loss/n,prec,max_prec,t_elap))
+        message = ('Epoch %d VAL loss %.3f min_loss %.3f acc %.3f time %.2f' % 
+                (i,c_loss,min_loss,acc,t_elap))
         logger.write(message+'\n')
         print message
     print "done"
@@ -157,16 +179,6 @@ def main(params):
         indices.extend(idxs)
         n += 1
     np.save(output_file, np.vstack(probs)[indices])
-    print evaluate(np.vstack(probs), np.vstack(targets))
-    print evaluate(np.load(output_file+".npy"), np.vstack(targets)[indices])
-
-    prec = evaluate(np.vstack(probs), np.vstack(targets))
-    if prec>max_prec: max_prec = prec
-
-    t_elap = time.time()-tst
-    message = ('Epoch %d VAL loss %.3f prec %.3f max_prec %.3f time %.2f' % 
-            (i,tot_loss/n,prec,max_prec,t_elap))
-        
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
