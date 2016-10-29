@@ -73,7 +73,7 @@ class MLP(Network):
         inp = self.inputs['X']
         for i in range(self.num_layers):
             oo = f.mul(inp,self.params['W'+str(i+1)]) + self.params['b'+str(i+1)]
-            inp = f.tanh( oo )
+            inp = f.relu( oo )
 
         x.output = f.softMax(inp)
         # loss
