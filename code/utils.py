@@ -157,11 +157,6 @@ class MinibatchLoader:
 if __name__ == '__main__':
     probs = np.asarray([[0.7,0.7,0.2],[0.2,0.2,0.8]])
     targets = np.asarray([[1,1,0],[0,1,1]])
-    #print evaluate_binary(probs,targets)
     print evaluate(probs,targets)
     print accuracy(probs,targets)
-    #dataset = "tiny"
-    #with open("../data/%s.test"%(dataset), "r") as r, open("../data/%s.valid"%(dataset),"w") as w:
-    #    for line in r.readlines():
-    #        w.write(line)
 
