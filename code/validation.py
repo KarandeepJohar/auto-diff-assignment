@@ -7,6 +7,19 @@ from utils import *
 import argparse
 from autograd import Autograd
 import time
+import contextlib
+import sys
+
+class DummyFile(object):
+    def write(self, x): pass
+
+@contextlib.contextmanager
+def nostdout():
+    save_stdout = sys.stdout
+    sys.stdout = DummyFile()
+    yield
+    sys.stdout = save_stdout
+
 EPS = 1e-4
 MLP_TIME_THRESHOLD = 15
 LSTM_TIME_THRESHOLD = 120
@@ -74,15 +87,18 @@ if __name__ == '__main__':
     mlp_file = params['result_mlp_file']
     lstm_file = params['result_lstm_file']
 
-    # load data and preprocess
-    dp = DataPreprocessor()
-    data = dp.preprocess('%s.train'%dataset, '%s.valid'%dataset, '%s.test.solution'%dataset)
-    # minibatches
-    mb_train = MinibatchLoader(data.training, batch_size, max_len, 
-           len(data.chardict), len(data.labeldict))
-    mb_test = MinibatchLoader(data.test, len(data.test), max_len, 
-           len(data.chardict), len(data.labeldict), shuffle=False)
+    with nostdout():
 
+        # load data and preprocess
+        dp = DataPreprocessor()
+        data = dp.preprocess('%s.train'%dataset, '%s.valid'%dataset, '%s.test.solution'%dataset)
+        # minibatches
+        mb_train = MinibatchLoader(data.training, batch_size, max_len, 
+               len(data.chardict), len(data.labeldict))
+        mb_test = MinibatchLoader(data.test, len(data.test), max_len, 
+               len(data.chardict), len(data.labeldict), shuffle=False)
+    
+    
     result = {}
     result["mlp_grad_check"] = 0
     result["mlp_accuracy"] = 0
@@ -92,59 +108,62 @@ if __name__ == '__main__':
     result["lstm_time"] = 0
     result["lstm_accuracy"] = 0
     validation = 1000
+    
     try:
-        try:
-            # build
-            print "building mlp..."
-            Mlp = mlp.MLP([max_len*mb_train.num_chars,num_hid,mb_train.num_labels])
-            print "checking gradients..."
-            grad_check(Mlp)
-            result["mlp_grad_check"] = 15
-        except ValueError:
-            pass
-        t_start = time.time()
-        params["init_lr"] = params["mlp_init_lr"]
-        mlp.main(params)
-        mlp_time = time.time()-t_start
+        with nostdout():
+            try:
 
-        targets = []
-        indices = []
-        for (idxs,e,l) in mb_test:
-            targets.append(l)
-            indices.extend(idxs)
-        student_mlp_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
+                # build
+                print "building mlp..."
+                Mlp = mlp.MLP([max_len*mb_train.num_chars,num_hid,mb_train.num_labels])
+                print "checking gradients..."
+                grad_check(Mlp)
+                result["mlp_grad_check"] = 15
+            except ValueError:
+                pass
+            t_start = time.time()
+            params["init_lr"] = params["mlp_init_lr"]
+            mlp.main(params)
+            mlp_time = time.time()-t_start
 
-        result["mlp_accuracy"] =  min(1,ideal_mlp_loss/student_mlp_loss)*10
-            
-        result["mlp_time"] = 15/max(mlp_time,15)*10
+            targets = []
+            indices = []
+            for (idxs,e,l) in mb_test:
+                targets.append(l)
+                indices.extend(idxs)
+            student_mlp_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
+
+            result["mlp_accuracy"] =  min(1,ideal_mlp_loss/student_mlp_loss)*10
+                
+            result["mlp_time"] = 15/max(mlp_time,15)*10
     except Exception, e:
         print "MLP CHECKING FAILED"
         validation = 0 
     try:
-        try:
-            # build
-            print "building lstm..."
-            Lstm = lstm.LSTM(max_len,mb_train.num_chars,num_hid,mb_train.num_labels)
-            print "checking gradients..."
-            grad_check(Lstm)
-            result["lstm_grad_check"] = 15
-        except ValueError:
-            pass
+        with nostdout():
+            try:
+                # build
+                print "building lstm..."
+                Lstm = lstm.LSTM(max_len,mb_train.num_chars,num_hid,mb_train.num_labels)
+                print "checking gradients..."
+                grad_check(Lstm)
+                result["lstm_grad_check"] = 15
+            except ValueError:
+                pass
 
-        t_start = time.time()
-        params["init_lr"] = params["lstm_init_lr"]
-        lstm.main(params)
-        lstm_time = time.time()-t_start
+            t_start = time.time()
+            params["init_lr"] = params["lstm_init_lr"]
+            lstm.main(params)
+            lstm_time = time.time()-t_start
 
-        result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
-        student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
+            result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
+            student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
 
-        print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
-        result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
+            print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
+            result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
     except Exception, e:
         print "LSTM CHECKING FAILED"
         validation = 0
-
     print "---------------------------------------------------";
     print "Your Autograder's total:", validation, "/ 1000";
     print "---------------------------------------------------";
