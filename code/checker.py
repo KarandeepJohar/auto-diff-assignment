@@ -147,7 +147,7 @@ if __name__ == '__main__':
     lstm.main(params)
     lstm_time = time.time()-t_start
 
-    result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*15
+    result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
     student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)[newIndices(indices)]).mean()
 
     print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
