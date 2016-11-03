@@ -76,7 +76,7 @@ if __name__ == '__main__':
 
     # load data and preprocess
     dp = DataPreprocessor()
-    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.valid'%dataset, '../data/%s.test.solution'%dataset)
+    data = dp.preprocess('%s.train'%dataset, '%s.valid'%dataset, '%s.test.solution'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
