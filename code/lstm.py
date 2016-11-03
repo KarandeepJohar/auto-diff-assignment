@@ -130,8 +130,8 @@ def main(params):
 
     # train
     print "training..."
-    logger = open('../logs/%s_lstm4c_L%d_H%d_B%d_E%d_lr%.3f.txt'%
-            (dataset,max_len,num_hid,batch_size,epochs,init_lr),'w')
+    # logger = open('../logs/%s_lstm4c_L%d_H%d_B%d_E%d_lr%.3f.txt'%
+    #         (dataset,max_len,num_hid,batch_size,epochs,init_lr),'w')
     tst = time.time()
     value_dict = lstm.my_xman.inputDict()
     min_loss = 1e5
@@ -148,7 +148,7 @@ def main(params):
             gd = lstm.bwd(value_dict)
             value_dict = lstm.update(value_dict, gd, lr)
             message = 'TRAIN loss = %.3f' % vd['loss']
-            logger.write(message+'\n')
+            # logger.write(message+'\n')
 
         # validate
         tot_loss, n= 0., 0
@@ -172,7 +172,7 @@ def main(params):
         t_elap = time.time()-tst
         message = ('Epoch %d VAL loss %.3f min_loss %.3f acc %.3f time %.2f' % 
                 (i,c_loss,min_loss,acc,t_elap))
-        logger.write(message+'\n')
+        # logger.write(message+'\n')
         print message
     print "done"
 
