@@ -83,7 +83,7 @@ if __name__ == '__main__':
 
     # load data and preprocess
     dp = DataPreprocessor()
-    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.valid'%dataset, '../data/%s.test'%dataset)
+    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.valid'%dataset, '../data/%s.test.solution'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
@@ -93,6 +93,7 @@ if __name__ == '__main__':
     result = {}
     result["mlp_grad_check"] = 0
     result["mlp_accuracy"] = 0
+
     result["mlp_time"] = 0
     result["lstm_grad_check"] = 0
     result["lstm_time"] = 0
