@@ -97,7 +97,6 @@ if __name__ == '__main__':
     result["lstm_grad_check"] = 0
     result["lstm_time"] = 0
     result["lstm_accuracy"] = 0
-
     try:
         # build
         print "building mlp..."
@@ -142,16 +141,26 @@ if __name__ == '__main__':
         print e
         result["lstm_grad_check"] = 0
 
-    t_start = time.time()
-    params["init_lr"] = params["lstm_init_lr"]
-    lstm.main(params)
-    lstm_time = time.time()-t_start
+    # t_start = time.time()
+    # params["init_lr"] = params["lstm_init_lr"]
+    # lstm.main(params)
+    # lstm_time = time.time()-t_start
 
-    result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
-    student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)[newIndices(indices)]).mean()
+    # result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
+    # student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)[newIndices(indices)]).mean()
 
-    print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
-    result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
+    # print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
+    # result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
+    scores = {}
+    scores['scores'] = result
+    print "---------------------------------------------------";
+    print "Your Autograder's total:", sum(result.values()), "/ 70";
+    print "---------------------------------------------------";
 
-    print result
-    print "Your Autograder's total:", sum(result.values()), "/ 70\n";
+    # print "{ scores: {Runtime:$runagg,PreRec:$pr} }\n";
+    print "{ scores: {mlpgradcheck:"+str(result["mlp_grad_check"])+\
+        ",lstmgradcheck:"+str(result["lstm_grad_check"])+\
+        ",mlpaccuracy:"+str(result["mlp_accuracy"])+\
+        ",lstmaccuracy:"+str(result["lstm_accuracy"])+\
+        ",mlptime:"+str(result["mlp_time"])+\
+        ",lstmtime:"+str(result["lstm_time"])+"} }"
