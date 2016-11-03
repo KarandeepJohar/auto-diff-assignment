@@ -19,11 +19,11 @@ EPS = 1e-4
 def grad_check(network):
     # function which takes a network object and checks gradients
     # based on default values of data and params
-    dataParamDict = network.graph.inputDict()
+    dataParamDict = network.my_xman.inputDict()
     fd = network.fwd(dataParamDict)
     grads = network.bwd(fd)
     for rname in grads:
-        if network.graph.isParam(rname):
+        if network.my_xman.isParam(rname):
             fd[rname].ravel()[0] += EPS
             fp = network.fwd(fd)
             a = fp['loss']
@@ -45,23 +45,23 @@ class Network:
     applying updates. All networks should subclass this.
     """
     def display(self):
-        for o in self.graph.operationSequence(self.graph.loss):
+        for o in self.my_xman.operationSequence(self.my_xman.loss):
             print o
 
     def fwd(self, valueDict):
-        ad = Autograd(self.graph)
-        opseq = self.graph.operationSequence(self.graph.loss)
+        ad = Autograd(self.my_xman)
+        opseq = self.my_xman.operationSequence(self.my_xman.loss)
 
         return ad.eval(opseq, valueDict)
 
     def bwd(self, valueDict):
-        ad = Autograd(self.graph)
-        opseq = self.graph.operationSequence(self.graph.loss)
+        ad = Autograd(self.my_xman)
+        opseq = self.my_xman.operationSequence(self.my_xman.loss)
         return ad.bprop(opseq, valueDict,loss=np.float_(1.0))
 
     def update(self, dataParamDict, grads, rate):
         for rname in grads:
-            if self.graph.isParam(rname):
+            if self.my_xman.isParam(rname):
                 if grads[rname].shape!=dataParamDict[rname].shape:
                     print rname, grads[rname].shape, dataParamDict[rname].shape
                 dataParamDict[rname] = dataParamDict[rname] - rate*grads[rname]
@@ -138,7 +138,7 @@ class LSTM(Network):
         x.output = f.softMax(x.o1)
         # loss
         x.loss = f.mean(f.crossEnt(x.output, self.inputs['y']))
-        self.graph = x.setup()
+        self.my_xman = x.setup()
         self.display()
 
     def data_dict(self, X, y):
@@ -189,7 +189,7 @@ class MLP(Network):
         x.output = f.softMax(inp)
         # loss
         x.loss = f.mean(f.crossEnt(x.output, self.inputs['y']))
-        self.graph = x.setup()
+        self.my_xman = x.setup()
         self.display()
 
     def init_params(self, in_size, out_size):
@@ -218,7 +218,7 @@ def learn(net, dataDict, initDict, epochs=10, rate=1.0, batch_size=100):
     def dvals(d,keys):
         return " ".join(map(lambda k:'%s=%g' % (k,d[k]), keys.split()))
     x,y = dataDict['input'], dataDict['y']
-    dataParamDict = net.graph.inputDict(**initDict)
+    dataParamDict = net.my_xman.inputDict(**initDict)
     for i in range(epochs):
         for j in range(0,x.shape[0],batch_size):
             x_c = x[j:j+batch_size,:]
@@ -240,7 +240,7 @@ def learn(net, dataDict, initDict, epochs=10, rate=1.0, batch_size=100):
 
 def bhuwanMLP(x,y):
     mlp = MLP()
-    h = mlp.graph
+    h = mlp.my_xman
     ad = Autograd(h)
     init_dict = mlp.init_params(x.shape[1],y.shape[1])
 
@@ -262,7 +262,7 @@ def bhuwanMLP(x,y):
 
 def bhuwanLSTM(x,y):
     lstm = LSTM(1)
-    h = lstm.graph
+    h = lstm.my_xman
     ad = Autograd(h)
     init_dict = lstm.init_params(x.shape[1],5,y.shape[1])
 
@@ -300,13 +300,13 @@ def entityMLP(train, test, num_chars, max_len, num_hid):
     mlp = MLP([max_len*num_chars, num_hid, train.num_labels])
     print "done"
     # grad check
-    paramDict = mlp.graph.inputDict()
+    paramDict = mlp.my_xman.inputDict()
     print paramDict['W1']
     grad_check(mlp, paramDict)
     #params = mlp.init_params(2,2)
     #data = mlp.data_dict(np.random.rand(5,2),np.random.rand(5,2))
     #_grad_check(mlp, data, params)
-    dataParamDict = mlp.graph.inputDict()
+    dataParamDict = mlp.my_xman.inputDict()
     print "training..."
     logger = open('../logs/auto_mlp.txt','w')
     tst = time.time()
@@ -354,7 +354,7 @@ def entityLSTM(train, test, num_chars, max_len, num_hid):
     print "checking gradients..."
     grad_check(lstm)
     print "ok"
-    value_dict = lstm.graph.inputDict()
+    value_dict = lstm.my_xman.inputDict()
     print "training..."
     logger = open('../logs/auto_lstm.txt','w')
     tst = time.time()

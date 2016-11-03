@@ -29,8 +29,8 @@ class LSTM(Network):
         self.length = max_len
         self._declareParams()
         self._declareInputs()
-        self.graph = self.build()
-        self.op_seq = self.graph.operationSequence(self.graph.loss)
+        self.my_xman = self.build()
+        self.op_seq = self.my_xman.operationSequence(self.my_xman.loss)
         self.display()
 
     def _declareParams(self):
@@ -133,7 +133,7 @@ def main(params):
     logger = open('../logs/%s_lstm4c_L%d_H%d_B%d_E%d_lr%.3f.txt'%
             (dataset,max_len,num_hid,batch_size,epochs,init_lr),'w')
     tst = time.time()
-    value_dict = lstm.graph.inputDict()
+    value_dict = lstm.my_xman.inputDict()
     min_loss = 1e5
     lr = init_lr
     for i in range(epochs):

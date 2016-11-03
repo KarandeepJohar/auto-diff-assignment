@@ -45,7 +45,7 @@ class DataPreprocessor:
 
         print 'preparing test data'
         test = self.parse_file(test_file, chardict, labeldict)
-
+        print test[:10],"\n"
         return Data(training, validation, test, chardict, labeldict)
 
     def make_dictionary(self, train_file, validation_file, test_file):
@@ -58,19 +58,19 @@ class DataPreprocessor:
         ftrain = io.open(train_file, 'r')
         for line in ftrain:
             entity, label = map(clean, line.rstrip().split('\t')[:2])
-            train_set |= set(list(entity))
+            train_set |= set(entity)
             label_set |= set(label.split(','))
 
-        fvalid = io.open(train_file, 'r')
+        fvalid = io.open(validation_file, 'r')
         for line in fvalid:
             entity, label = map(clean, line.rstrip().split('\t')[:2])
-            valid_set |= set(list(entity))
+            valid_set |= set(entity)
             label_set |= set(label.split(','))
 
         ftest = io.open(test_file, 'r')
         for line in ftest:
             entity, label = map(clean, line.rstrip().split('\t')[:2])
-            test_set |= set(list(entity))
+            test_set |= set(entity)
             # label_set |= set(label.split(','))
         
         print '# chars in training ', len(train_set)
@@ -99,7 +99,6 @@ class DataPreprocessor:
         idx = 0
         for line in fin:                
             entity, label = map(clean, line.rstrip().split('\t')[:2])
-            # print entity
             ent = map(lambda c:chardict[c], list(entity))
             lab = map(lambda l:labeldict[l] if l in labeldict else 0, label.split(','))
             examples.append((idx, ent, lab))

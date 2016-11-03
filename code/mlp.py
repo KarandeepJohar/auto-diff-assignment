@@ -25,8 +25,8 @@ class MLP(Network):
         self.num_layers = len(layer_sizes)-1
         self._declareParams(layer_sizes)
         self._declareInputs(layer_sizes)
-        self.graph = self._build()
-        self.op_seq = self.graph.operationSequence(self.graph.loss)
+        self.my_xman = self._build()
+        self.op_seq = self.my_xman.operationSequence(self.my_xman.loss)
 
     def _declareParams(self, layer_sizes):
         print "INITIAZLIZING with layer_sizes:", layer_sizes
@@ -82,7 +82,7 @@ def main(params):
            len(data.chardict), len(data.labeldict))
     mb_valid = MinibatchLoader(data.validation, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
-    mb_test = MinibatchLoader(data.test, batch_size, max_len, 
+    mb_test = MinibatchLoader(data.test, 20000, max_len, 
            len(data.chardict), len(data.labeldict))
 
     # build
@@ -95,7 +95,7 @@ def main(params):
     logger = open('../logs/%s_mlp4c_L%d_H%d_B%d_E%d_lr%.3f.txt'%
             (dataset,max_len,num_hid,batch_size,epochs,init_lr),'w')
     tst = time.time()
-    value_dict = mlp.graph.inputDict()
+    value_dict = mlp.my_xman.inputDict()
     min_loss = 1e5
     lr = init_lr
     for i in range(epochs):
@@ -149,13 +149,14 @@ def main(params):
         # fwd
         vd = mlp.fwd(value_dict)
         tot_loss += vd['loss']
-        probs.append(vd['output'])
-        targets.append(l)
+        probs.extend(vd['output'])
+        targets.extend(l)
         indices.extend(idxs)
         n += 1
-    print tot_loss/n
 
-    
+    print tot_loss/n, n
+    print indices
+    np.save("file", np.vstack(targets)[indices])
     np.save(output_file, np.vstack(probs)[indices])
 
 if __name__=='__main__':
