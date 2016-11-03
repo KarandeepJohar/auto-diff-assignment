@@ -2,23 +2,6 @@ import io
 import numpy as np
 import urllib
 
-def evaluate(probs, targets):
-    # compute precision @1
-    preds = (probs>0.5)
-    tp = (preds*targets).sum()
-    fp = (preds*(1-targets)).sum()
-    tn = ((1-preds)*targets).sum()
-    fn = ((1-preds)*(1-targets)).sum()
-    prec = float(tp)/(tp+fp) if tp+fp>0 else 0.
-    recall = float(tp)/(tn+tp) if tn+fp>0 else 0.
-    f1 = 2*prec*recall/(prec+recall) if prec+recall>0 else 0.
-    return prec, recall, f1
-
-def accuracy(probs, targets):
-    preds = np.argmax(probs, axis=1)
-    targ = np.argmax(targets, axis=1)
-    return float((preds==targ).sum())/preds.shape[0]
-
 def clean(x):
     return urllib.unquote(str(x)).decode('utf8').strip()
 
@@ -58,20 +41,19 @@ class DataPreprocessor:
         ftrain = io.open(train_file, 'r')
         for line in ftrain:
             entity, label = map(clean, line.rstrip().split('\t')[:2])
-            train_set |= set(entity)
+            train_set |= set(list(entity))
             label_set |= set(label.split(','))
 
         fvalid = io.open(validation_file, 'r')
         for line in fvalid:
             entity, label = map(clean, line.rstrip().split('\t')[:2])
-            valid_set |= set(entity)
+            valid_set |= set(list(entity))
             label_set |= set(label.split(','))
 
         ftest = io.open(test_file, 'r')
         for line in ftest:
             entity, label = map(clean, line.rstrip().split('\t')[:2])
-            test_set |= set(entity)
-            # label_set |= set(label.split(','))
+            test_set |= set(list(entity))
         
         print '# chars in training ', len(train_set)
         print '# chars in validation ', len(valid_set)
@@ -99,6 +81,7 @@ class DataPreprocessor:
         idx = 0
         for line in fin:                
             entity, label = map(clean, line.rstrip().split('\t')[:2])
+            # print entity
             ent = map(lambda c:chardict[c], list(entity))
             lab = map(lambda l:labeldict[l] if l in labeldict else 0, label.split(','))
             examples.append((idx, ent, lab))
@@ -108,13 +91,14 @@ class DataPreprocessor:
         return examples
 
 class MinibatchLoader:
-    def __init__(self, examples, batch_size, max_len, num_chars, num_labels):
+    def __init__(self, examples, batch_size, max_len, num_chars, num_labels, shuffle=True):
         self.batch_size = batch_size
         self.max_len = max_len
         self.examples = examples
         self.num_examples = len(examples)
         self.num_labels = num_labels
         self.num_chars = num_chars
+        self.shuffle = shuffle
         self.reset()
 
     def __iter__(self):
@@ -123,7 +107,8 @@ class MinibatchLoader:
 
     def reset(self):
         """ next epoch """
-        self.permutation = np.random.permutation(self.num_examples)
+        if self.shuffle: self.permutation = np.random.permutation(self.num_examples)
+        else: self.permutation = np.arange(self.num_examples)
         self.ptr = 0
 
     def next(self):
@@ -138,7 +123,7 @@ class MinibatchLoader:
         ixs = range(self.ptr,self.ptr+batch_size)
         self.ptr += batch_size
 
-        i = [0]*batch_size
+        i = np.zeros((batch_size), dtype='int32')
         e = np.zeros((batch_size, self.max_len, 
             self.num_chars), dtype='int32') # entity
         l = np.zeros((batch_size, self.num_labels), dtype='int32') # labels
@@ -147,14 +132,8 @@ class MinibatchLoader:
             le = min(len(ent),self.max_len)
             i[n] = idx
             e[n,np.arange(le),ent[:le]] = 1
-            #e[n,:min(len(ent),self.max_len)] = np.array(ent[:self.max_len])
-            #l[n,lab] = 1/len(lab)
             l[n,lab] = 1
+
         return i, e, l
 
-if __name__ == '__main__':
-    probs = np.asarray([[0.7,0.7,0.2],[0.2,0.2,0.8]])
-    targets = np.asarray([[1,1,0],[0,1,1]])
-    print evaluate(probs,targets)
-    print accuracy(probs,targets)
 

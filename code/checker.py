@@ -13,13 +13,6 @@ LSTM_TIME_THRESHOLD = 100
 ideal_mlp_loss = 0.9
 ideal_lstm_loss = 0.9
 
-
-def newIndices(indices):
-    l = [0]*len(indices)
-    for i in range(len(indices)):
-        l[indices[i]]=i
-    return l
-
 def _crossEnt(x,y):
     log_x = np.nan_to_num(np.log(x))
     return - np.multiply(y,log_x).sum(axis=1, keepdims=True)
@@ -63,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_len', dest='max_len', type=int, default=10)
     parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=16)
-    parser.add_argument('--dataset', dest='dataset', type=str, default='autolab')
+    parser.add_argument('--dataset', dest='dataset', type=str, default='../data/autolab')
     parser.add_argument('--epochs', dest='epochs', type=int, default=15)
     parser.add_argument('--mlp_init_lr', dest='mlp_init_lr', type=float, default=0.05)
     parser.add_argument('--lstm_init_lr', dest='lstm_init_lr', type=float, default=0.5)
@@ -121,8 +114,8 @@ if __name__ == '__main__':
     for (idxs,e,l) in mb_test:
         targets.append(l)
         indices.extend(idxs)
-    student_mlp_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)[newIndices(indices)]).mean()
-    # ideal_mlp_loss = _crossEnt(np.load(mlp_file+".npy"), np.vstack(targets)[newIndices(indices)]).mean()
+    student_mlp_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
+    # ideal_mlp_loss = _crossEnt(np.load(mlp_file+".npy"), np.vstack(targets)).mean()
 
     print "ideal_mlp_loss:", ideal_mlp_loss, "student_mlp_loss:", student_mlp_loss
     print ideal_mlp_loss/student_mlp_loss*10
@@ -148,7 +141,7 @@ if __name__ == '__main__':
     # lstm_time = time.time()-t_start
 
     # result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
-    # student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)[newIndices(indices)]).mean()
+    # student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
 
     # print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
     # result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10

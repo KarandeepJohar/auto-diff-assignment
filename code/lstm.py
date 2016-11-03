@@ -115,14 +115,14 @@ def main(params):
 
     # load data and preprocess
     dp = DataPreprocessor()
-    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.valid'%dataset, '../data/%s.test'%dataset)
+    data = dp.preprocess('%s.train'%dataset, '%s.valid'%dataset, '%s.test'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
-    mb_valid = MinibatchLoader(data.validation, batch_size, max_len, 
-           len(data.chardict), len(data.labeldict))
-    mb_test = MinibatchLoader(data.test, batch_size, max_len, 
-           len(data.chardict), len(data.labeldict))
+    mb_valid = MinibatchLoader(data.validation, len(data.validation), max_len, 
+           len(data.chardict), len(data.labeldict), shuffle=False)
+    mb_test = MinibatchLoader(data.test, len(data.test), max_len, 
+           len(data.chardict), len(data.labeldict), shuffle=False)
     # build
     print "building lstm..."
     lstm = LSTM(max_len,mb_train.num_chars,num_hid,mb_train.num_labels)
@@ -192,13 +192,8 @@ def main(params):
         targets.append(l)
         indices.extend(idxs)
         n += 1
-    def newIndices(indices):
-        l = [0]*len(indices)
-        for i in range(len(indices)):
-            l[indices[i]]=i
-        return l
 
-    np.save(output_file, np.vstack(probs)[newIndices(indices)])
+    np.save(output_file, np.vstack(probs))
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
