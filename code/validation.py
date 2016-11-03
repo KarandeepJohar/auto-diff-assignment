@@ -57,7 +57,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=64)
     parser.add_argument('--dataset', dest='dataset', type=str, default='../data/autolab')
-    parser.add_argument('--epochs', dest='epochs', type=int, default=15)
+    parser.add_argument('--epochs', dest='epochs', type=int, default=1)
     parser.add_argument('--mlp_init_lr', dest='mlp_init_lr', type=float, default=0.05)
     parser.add_argument('--lstm_init_lr', dest='lstm_init_lr', type=float, default=0.5)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
@@ -91,6 +91,7 @@ if __name__ == '__main__':
     result["lstm_grad_check"] = 0
     result["lstm_time"] = 0
     result["lstm_accuracy"] = 0
+    validation = 1000
     try:
         try:
             # build
@@ -116,15 +117,13 @@ if __name__ == '__main__':
             targets.append(l)
             indices.extend(idxs)
         student_mlp_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
-        # ideal_mlp_loss = _crossEnt(np.load(mlp_file+".npy"), np.vstack(targets)).mean()
 
-        # print "ideal_mlp_loss:", ideal_mlp_loss, "student_mlp_loss:", student_mlp_loss
-        # print ideal_mlp_loss/student_mlp_loss*10
         result["mlp_accuracy"] =  min(1,ideal_mlp_loss/student_mlp_loss)*10
             
         result["mlp_time"] = 15/max(mlp_time,15)*10
     except Exception, e:
         print "MLP CHECKING FAILED"
+        validation = 0 
     try:
         try:
             # build
@@ -147,18 +146,12 @@ if __name__ == '__main__':
 
         print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
         result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
-        scores = {}
-        scores['scores'] = result
     except Exception, e:
         print "LSTM CHECKING FAILED"
+        validation = 0
 
     print "---------------------------------------------------";
-    print "Your Autograder's total:", sum(result.values()), "/ 70";
+    print "Your Autograder's total:", validation, "/ 1000";
     print "---------------------------------------------------";
 
-    print "{ scores: {mlpgradcheck:"+str(result["mlp_grad_check"])+\
-        ",lstmgradcheck:"+str(result["lstm_grad_check"])+\
-        ",mlpaccuracy:"+str(result["mlp_accuracy"])+\
-        ",lstmaccuracy:"+str(result["lstm_accuracy"])+\
-        ",mlptime:"+str(result["mlp_time"])+\
-        ",lstmtime:"+str(result["lstm_time"])+"} }"
+    print "{ scores: {validation:"+str(validation)+"} }"
