@@ -45,7 +45,7 @@ class DataPreprocessor:
 
         print 'preparing test data'
         test = self.parse_file(test_file, chardict, labeldict)
-        print test[:10],"\n"
+
         return Data(training, validation, test, chardict, labeldict)
 
     def make_dictionary(self, train_file, validation_file, test_file):
@@ -138,7 +138,7 @@ class MinibatchLoader:
         ixs = range(self.ptr,self.ptr+batch_size)
         self.ptr += batch_size
 
-        i = np.zeros((batch_size), dtype='int32')
+        i = [0]*batch_size
         e = np.zeros((batch_size, self.max_len, 
             self.num_chars), dtype='int32') # entity
         l = np.zeros((batch_size, self.num_labels), dtype='int32') # labels
@@ -150,7 +150,6 @@ class MinibatchLoader:
             #e[n,:min(len(ent),self.max_len)] = np.array(ent[:self.max_len])
             #l[n,lab] = 1/len(lab)
             l[n,lab] = 1
-
         return i, e, l
 
 if __name__ == '__main__':

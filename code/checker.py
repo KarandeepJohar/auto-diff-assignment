@@ -4,7 +4,19 @@ from functions import *
 from utils import *
 import argparse
 from autograd import Autograd
+import time
 EPS = 1e-4
+MLP_TIME_THRESHOLD = 15
+LSTM_TIME_THRESHOLD = 100
+ideal_mlp_loss = 0.9
+ideal_lstm_loss = 0.9
+
+
+def newIndices(indices):
+    l = [0]*len(indices)
+    for i in range(len(indices)):
+        l[indices[i]]=i
+    return l
 
 def _crossEnt(x,y):
     log_x = np.nan_to_num(np.log(x))
@@ -50,17 +62,22 @@ if __name__ == '__main__':
     parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=16)
     parser.add_argument('--dataset', dest='dataset', type=str, default='autolab')
-    parser.add_argument('--epochs', dest='epochs', type=int, default=5)
-    parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
+    parser.add_argument('--epochs', dest='epochs', type=int, default=15)
+    parser.add_argument('--mlp_init_lr', dest='mlp_init_lr', type=float, default=0.05)
+    parser.add_argument('--lstm_init_lr', dest='lstm_init_lr', type=float, default=0.5)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
+    parser.add_argument('--mlp-solution', dest='result_mlp_file', type=str, default='MLP_solution')
+    parser.add_argument('--lstm-solution', dest='result_lstm_file', type=str, default='LSTM_solution')
+
     params = vars(parser.parse_args())
     epochs = params['epochs']
     max_len = params['max_len']
     num_hid = params['num_hid']
     batch_size = params['batch_size']
     dataset = params['dataset']
-    init_lr = params['init_lr']
     output_file = params['output_file']
+    mlp_file = params['result_mlp_file']
+    lstm_file = params['result_lstm_file']
 
     # load data and preprocess
     dp = DataPreprocessor()
@@ -68,31 +85,71 @@ if __name__ == '__main__':
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
-    mb_test = MinibatchLoader(data.test, 200000, max_len, 
+    mb_test = MinibatchLoader(data.test, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
 
-    # build
-    print "building mlp..."
-    Mlp = mlp.MLP([max_len*mb_train.num_chars,num_hid,mb_train.num_labels])
-    print "checking gradients..."
-    grad_check(Mlp)
+    result = {}
+    result["mlp_grad_check"] = 0
+    result["mlp_accuracy"] = 0
+    result["mlp_time"] = 0
+    result["lstm_grad_check"] = 0
+    result["lstm_time"] = 0
+    result["lstm_accuracy"] = 0
 
+    try:
+        # build
+        print "building mlp..."
+        Mlp = mlp.MLP([max_len*mb_train.num_chars,num_hid,mb_train.num_labels])
+        print "checking gradients..."
+        grad_check(Mlp)
+        result["mlp_grad_check"] = 15
+    except Exception, e:
+        print "GRADIENT CHECK FAILED"
+        print e
+        result["mlp_grad_check"] = 0
+
+
+    t_start = time.time()
+    params["init_lr"] = params["mlp_init_lr"]
     mlp.main(params)
+    mlp_time = time.time()-t_start
+
     targets = []
     indices = []
     for (idxs,e,l) in mb_test:
         targets.append(l)
         indices.extend(idxs)
-    # print indices, targets
-    # print np.vstack(targets)[indices]
-    np.save("output2", np.vstack(targets)[indices])
-    if 0 in indices:
-        print "YAYA"
-    print _crossEnt(np.load(output_file+".npy"), np.vstack(targets)[indices]).mean()
-    # print "building lstm..."
-    # lstm = LSTM(max_len,mb_train.num_chars,num_hid,mb_train.num_labels)
-    # print "done"
-    # # check
-    # print "checking gradients..."
-    # grad_check(lstm)
+    student_mlp_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)[newIndices(indices)]).mean()
+    # ideal_mlp_loss = _crossEnt(np.load(mlp_file+".npy"), np.vstack(targets)[newIndices(indices)]).mean()
 
+    print "ideal_mlp_loss:", ideal_mlp_loss, "student_mlp_loss:", student_mlp_loss
+    print ideal_mlp_loss/student_mlp_loss*10
+    result["mlp_accuracy"] =  min(1,ideal_mlp_loss/student_mlp_loss)*10
+        
+    result["mlp_time"] = 15/max(mlp_time,15)*15
+    
+    try:
+        # build
+        print "building lstm..."
+        Lstm = lstm.LSTM(max_len,mb_train.num_chars,num_hid,mb_train.num_labels)
+        print "checking gradients..."
+        grad_check(Lstm)
+        result["lstm_grad_check"] = 15
+    except Exception, e:
+        print "GRADIENT CHECK FAILED"
+        print e
+        result["lstm_grad_check"] = 0
+
+    t_start = time.time()
+    params["init_lr"] = params["lstm_init_lr"]
+    lstm.main(params)
+    lstm_time = time.time()-t_start
+
+    result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*15
+    student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)[newIndices(indices)]).mean()
+
+    print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
+    result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
+
+    print result
+    print "Your Autograder's total:", sum(result.values()), "/ 70\n";

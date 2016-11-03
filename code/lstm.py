@@ -31,7 +31,6 @@ class LSTM(Network):
         self._declareInputs()
         self.my_xman = self.build()
         self.op_seq = self.my_xman.operationSequence(self.my_xman.loss)
-        self.display()
 
     def _declareParams(self):
         scW = glorot(self.in_size,self.num_hid)
@@ -112,6 +111,7 @@ def main(params):
     batch_size = params['batch_size']
     dataset = params['dataset']
     init_lr = params['init_lr']
+    output_file = params['output_file']
 
     # load data and preprocess
     dp = DataPreprocessor()
@@ -192,7 +192,13 @@ def main(params):
         targets.append(l)
         indices.extend(idxs)
         n += 1
-    np.save(output_file, np.vstack(probs)[indices])
+    def newIndices(indices):
+        l = [0]*len(indices)
+        for i in range(len(indices)):
+            l[indices[i]]=i
+        return l
+
+    np.save(output_file, np.vstack(probs)[newIndices(indices)])
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()

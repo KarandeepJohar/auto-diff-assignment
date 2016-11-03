@@ -82,7 +82,7 @@ def main(params):
            len(data.chardict), len(data.labeldict))
     mb_valid = MinibatchLoader(data.validation, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
-    mb_test = MinibatchLoader(data.test, 20000, max_len, 
+    mb_test = MinibatchLoader(data.test, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
 
     # build
@@ -155,9 +155,13 @@ def main(params):
         n += 1
 
     print tot_loss/n, n
-    print indices
-    np.save("file", np.vstack(targets)[indices])
-    np.save(output_file, np.vstack(probs)[indices])
+    def newIndices(indices):
+        l = [0]*len(indices)
+        for i in range(len(indices)):
+            l[indices[i]]=i
+        return l
+
+    np.save(output_file, np.vstack(probs)[newIndices(indices)])
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
