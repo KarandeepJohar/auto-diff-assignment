@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import mlp
 import lstm
 from functions import *
@@ -81,7 +83,7 @@ if __name__ == '__main__':
 
     # load data and preprocess
     dp = DataPreprocessor()
-    data = dp.preprocess('../data/%s.train'%dataset, '../data/%s.valid'%dataset, '../data/%s.test'%dataset)
+    data = dp.preprocess('../autolab_dataset/%s.train'%dataset, '../autolab_dataset/%s.valid'%dataset, '../autolab_dataset/%s.test'%dataset)
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
