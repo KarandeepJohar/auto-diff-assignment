@@ -39,10 +39,10 @@ def grad_check(network):
     for rname in grads:
         if network.my_xman.isParam(rname):
             fd[rname].ravel()[0] += EPS
-            fp = fwd(fd)
+            fp = fwd(network, fd)
             a = fp['loss']
             fd[rname].ravel()[0] -= 2*EPS
-            fm = fwd(fd)
+            fm = fwd(network, fd)
             b = fm['loss']
             fd[rname].ravel()[0] += EPS
             auto = grads[rname].ravel()[0]
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_hid', dest='num_hid', type=int, default=50)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=16)
     parser.add_argument('--dataset', dest='dataset', type=str, default='../data/autolab')
-    parser.add_argument('--epochs', dest='epochs', type=int, default=15)
+    parser.add_argument('--epochs', dest='epochs', type=int, default=20)
     parser.add_argument('--mlp_init_lr', dest='mlp_init_lr', type=float, default=0.05)
     parser.add_argument('--lstm_init_lr', dest='lstm_init_lr', type=float, default=0.5)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
@@ -80,8 +80,8 @@ if __name__ == '__main__':
     # minibatches
     mb_train = MinibatchLoader(data.training, batch_size, max_len, 
            len(data.chardict), len(data.labeldict))
-    mb_test = MinibatchLoader(data.test, batch_size, max_len, 
-           len(data.chardict), len(data.labeldict))
+    mb_test = MinibatchLoader(data.test, len(data.test), max_len, 
+           len(data.chardict), len(data.labeldict), shuffle=False)
 
     result = {}
     result["mlp_grad_check"] = 0
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     print ideal_mlp_loss/student_mlp_loss*10
     result["mlp_accuracy"] =  min(1,ideal_mlp_loss/student_mlp_loss)*10
         
-    result["mlp_time"] = 15/max(mlp_time,15)*15
+    result["mlp_time"] = 15/max(mlp_time,15)*10
     
     try:
         # build
@@ -135,16 +135,16 @@ if __name__ == '__main__':
         print e
         result["lstm_grad_check"] = 0
 
-    # t_start = time.time()
-    # params["init_lr"] = params["lstm_init_lr"]
-    # lstm.main(params)
-    # lstm_time = time.time()-t_start
+    t_start = time.time()
+    params["init_lr"] = params["lstm_init_lr"]
+    lstm.main(params)
+    lstm_time = time.time()-t_start
 
-    # result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
-    # student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
+    result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
+    student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
 
-    # print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
-    # result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
+    print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
+    result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
     scores = {}
     scores['scores'] = result
     print "---------------------------------------------------";

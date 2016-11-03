@@ -1,7 +1,23 @@
 import io
 import numpy as np
 import urllib
-
+def evaluate(probs, targets):      
+    # compute precision @1        
+    preds = (probs>0.5)       
+    tp = (preds*targets).sum()        
+    fp = (preds*(1-targets)).sum()        
+    tn = ((1-preds)*targets).sum()        
+    fn = ((1-preds)*(1-targets)).sum()        
+    prec = float(tp)/(tp+fp) if tp+fp>0 else 0.       
+    recall = float(tp)/(tn+tp) if tn+fp>0 else 0.     
+    f1 = 2*prec*recall/(prec+recall) if prec+recall>0 else 0.     
+    return prec, recall, f1       
+       
+def accuracy(probs, targets):     
+    preds = np.argmax(probs, axis=1)      
+    targ = np.argmax(targets, axis=1)     
+    return float((preds==targ).sum())/preds.shape[0]      
+ 
 def clean(x):
     return urllib.unquote(str(x)).decode('utf8').strip()
 

@@ -155,7 +155,6 @@ def main(params):
         n += 1
 
     print tot_loss/n, n
-
     np.save(output_file, np.vstack(probs))
 
 if __name__=='__main__':
