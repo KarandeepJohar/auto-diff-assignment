@@ -46,10 +46,10 @@ def grad_check(network):
     for rname in grads:
         if network.my_xman.isParam(rname):
             fd[rname].ravel()[0] += EPS
-            fp = network.fwd(fd)
+            fp = fwd(fd)
             a = fp['loss']
             fd[rname].ravel()[0] -= 2*EPS
-            fm = network.fwd(fd)
+            fm = fwd(fd)
             b = fm['loss']
             fd[rname].ravel()[0] += EPS
             auto = grads[rname].ravel()[0]
