@@ -123,6 +123,7 @@ if __name__ == '__main__':
                 pass
             t_start = time.time()
             params["init_lr"] = params["mlp_init_lr"]
+            params["output_file"] = output_file+"_mlp"
             mlp.main(params)
             mlp_time = time.time()-t_start
 
@@ -131,7 +132,7 @@ if __name__ == '__main__':
             for (idxs,e,l) in mb_test:
                 targets.append(l)
                 indices.extend(idxs)
-            student_mlp_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
+            student_mlp_loss = _crossEnt(np.load(params["output_file"]+".npy"), np.vstack(targets)).mean()
 
             result["mlp_accuracy"] =  min(1,ideal_mlp_loss/student_mlp_loss)*10
                 
@@ -153,11 +154,12 @@ if __name__ == '__main__':
 
             t_start = time.time()
             params["init_lr"] = params["lstm_init_lr"]
+            params["output_file"] = output_file+"_lstm"
             lstm.main(params)
             lstm_time = time.time()-t_start
 
             result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
-            student_lstm_loss = _crossEnt(np.load(output_file+".npy"), np.vstack(targets)).mean()
+            student_lstm_loss = _crossEnt(np.load(params["output_file"]+".npy"), np.vstack(targets)).mean()
 
             print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
             result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
