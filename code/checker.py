@@ -121,10 +121,12 @@ if __name__ == '__main__':
         # ideal_mlp_loss = _crossEnt(np.load(mlp_file+".npy"), np.vstack(targets)).mean()
 
         print "ideal_mlp_loss:", ideal_mlp_loss, "student_mlp_loss:", student_mlp_loss
+        print "lstm_time:", mlp_time
+
         # print ideal_mlp_loss/student_mlp_loss*10
         result["mlp_accuracy"] =  min(1,ideal_mlp_loss/student_mlp_loss)*10
             
-        result["mlp_time"] = 15/max(mlp_time,15)*10
+        result["mlp_time"] = MLP_TIME_THRESHOLD/max(mlp_time,MLP_TIME_THRESHOLD)*10
     except Exception, e:
         print "MLP CHECKING FAILED"
         print e
@@ -151,6 +153,8 @@ if __name__ == '__main__':
         student_lstm_loss = _crossEnt(np.load(params["output_file"]+".npy"), np.vstack(targets)).mean()
 
         print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
+        print "lstm_time:", lstm_time
+
         result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
         scores = {}
         scores['scores'] = result
