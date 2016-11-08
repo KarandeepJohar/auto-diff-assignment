@@ -8,10 +8,23 @@ import argparse
 from autograd import Autograd
 import time
 EPS = 1e-4
-MLP_TIME_THRESHOLD = 15
-LSTM_TIME_THRESHOLD = 120
-ideal_mlp_loss = 0.9
-ideal_lstm_loss = 0.9
+
+MLP_LOSS_THRESHOLD = [(0.94,10), (1.02,5), (1.10, 0)]
+LSTM_LOSS_THRESHOLD = [(0.92,10), (0.95,5), (1, 0)]
+MLP_TIME_THRESHOLD = [(12,10), (20,5), (30,0)]
+LSTM_TIME_THRESHOLD = [(100,10), (120,5), (130,0)]
+def linear(thresholds, x):
+    return float(thresholds[1][1]-thresholds[0][1])*(x- thresholds[0][0])/(thresholds[1][0]-thresholds[0][0])+thresholds[0][1]
+""" x1 and x2 are two tuples """
+def linear_mark(thresholds, x):
+    if x<=thresholds[0][0]:
+        return thresholds[0][1]
+    elif x<=thresholds[1][0]:
+        return linear(thresholds[:2], x)
+    elif x<=thresholds[2][0]:
+        return linear(thresholds[1:3], x)
+    else:
+        return thresholds[2][1]
 
 def _crossEnt(x,y):
     log_x = np.nan_to_num(np.log(x))
@@ -58,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=64)
     parser.add_argument('--dataset', dest='dataset', type=str, default='../data/autolab')
     parser.add_argument('--epochs', dest='epochs', type=int, default=15)
-    parser.add_argument('--mlp_init_lr', dest='mlp_init_lr', type=float, default=0.05)
+    parser.add_argument('--mlp_init_lr', dest='mlp_init_lr', type=float, default=0.5)
     parser.add_argument('--lstm_init_lr', dest='lstm_init_lr', type=float, default=0.5)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
     parser.add_argument('--mlp-solution', dest='result_mlp_file', type=str, default='MLP_solution')
@@ -100,7 +113,7 @@ if __name__ == '__main__':
             grad_check(Mlp)
             result["mlp_grad_check"] = 15
         except Exception, e:
-            print "GRADIENT CHECK FAILED"
+            print "MLP GRADIENT CHECK FAILED"
             print e
             result["mlp_grad_check"] = 0
 
@@ -120,13 +133,13 @@ if __name__ == '__main__':
         student_mlp_loss = _crossEnt(np.load(params["output_file"]+".npy"), np.vstack(targets)).mean()
         # ideal_mlp_loss = _crossEnt(np.load(mlp_file+".npy"), np.vstack(targets)).mean()
 
-        print "ideal_mlp_loss:", ideal_mlp_loss, "student_mlp_loss:", student_mlp_loss
-        print "lstm_time:", mlp_time
+        print "student_mlp_loss:", student_mlp_loss
+        print "mlp_time:", mlp_time
 
         # print ideal_mlp_loss/student_mlp_loss*10
-        result["mlp_accuracy"] =  min(1,ideal_mlp_loss/student_mlp_loss)*10
+        result["mlp_accuracy"] =  linear_mark(MLP_LOSS_THRESHOLD, student_mlp_loss)
             
-        result["mlp_time"] = MLP_TIME_THRESHOLD/max(mlp_time,MLP_TIME_THRESHOLD)*10
+        result["mlp_time"] = linear_mark(MLP_TIME_THRESHOLD, mlp_time)
     except Exception, e:
         print "MLP CHECKING FAILED"
         print e
@@ -139,7 +152,7 @@ if __name__ == '__main__':
             grad_check(Lstm)
             result["lstm_grad_check"] = 15
         except Exception, e:
-            print "GRADIENT CHECK FAILED"
+            print "LSTM GRADIENT CHECK FAILED"
             print e
 
         t_start = time.time()
@@ -149,13 +162,15 @@ if __name__ == '__main__':
         lstm.main(params)
         lstm_time = time.time()-t_start
 
-        result["lstm_time"] = LSTM_TIME_THRESHOLD/max(lstm_time,LSTM_TIME_THRESHOLD)*10
         student_lstm_loss = _crossEnt(np.load(params["output_file"]+".npy"), np.vstack(targets)).mean()
 
-        print "ideal_lstm_loss:", ideal_lstm_loss, "student_lstm_loss:", student_lstm_loss
+        print  "student_lstm_loss:", student_lstm_loss
         print "lstm_time:", lstm_time
+        result["lstm_accuracy"] =  linear_mark(LSTM_LOSS_THRESHOLD, student_lstm_loss)
+            
+        result["lstm_time"] = linear_mark(LSTM_TIME_THRESHOLD, lstm_time)
 
-        result["lstm_accuracy"] =   min(1,ideal_lstm_loss/student_lstm_loss)*10
+
         scores = {}
         scores['scores'] = result
     except Exception, e:
