@@ -7,6 +7,7 @@ from utils import *
 import argparse
 from autograd import Autograd
 import time
+import os
 EPS = 1e-4
 
 MLP_LOSS_THRESHOLD = [(0.94,10), (1.02,5), (1.10, 0)]
@@ -104,6 +105,11 @@ if __name__ == '__main__':
     result["lstm_grad_check"] = 0
     result["lstm_time"] = 0
     result["lstm_accuracy"] = 0
+    targets = []
+    indices = []
+    for (idxs,e,l) in mb_test:
+        targets.append(l)
+        indices.extend(idxs)
     try:
         try:
             # build
@@ -118,23 +124,22 @@ if __name__ == '__main__':
             result["mlp_grad_check"] = 0
 
 
-        t_start = time.time()
+        t_start = time.clock()
+        # print os.times()
+        t_start1 = os.times()[0]
         params["init_lr"] = params["mlp_init_lr"]
         params["output_file"] = output_file+"_mlp"
 
         mlp.main(params)
-        mlp_time = time.time()-t_start
+        mlp_time = time.clock()-t_start
+        user_time = os.times()[0]-t_start1
+        # print os.times()
 
-        targets = []
-        indices = []
-        for (idxs,e,l) in mb_test:
-            targets.append(l)
-            indices.extend(idxs)
         student_mlp_loss = _crossEnt(np.load(params["output_file"]+".npy"), np.vstack(targets)).mean()
         # ideal_mlp_loss = _crossEnt(np.load(mlp_file+".npy"), np.vstack(targets)).mean()
 
         print "student_mlp_loss:", student_mlp_loss
-        print "mlp_time:", mlp_time
+        print "mlp_time:", mlp_time, "user_time:", user_time
 
         # print ideal_mlp_loss/student_mlp_loss*10
         result["mlp_accuracy"] =  linear_mark(MLP_LOSS_THRESHOLD, student_mlp_loss)
@@ -155,17 +160,18 @@ if __name__ == '__main__':
             print "LSTM GRADIENT CHECK FAILED"
             print e
 
-        t_start = time.time()
+        t_start = time.clock()
+        t_start1 = os.times()[0]
         params["init_lr"] = params["lstm_init_lr"]
         params["output_file"] = output_file+"_lstm"
 
         lstm.main(params)
-        lstm_time = time.time()-t_start
-
+        lstm_time = time.clock()-t_start
+        user_time = os.times()[0] - t_start1
         student_lstm_loss = _crossEnt(np.load(params["output_file"]+".npy"), np.vstack(targets)).mean()
 
         print  "student_lstm_loss:", student_lstm_loss
-        print "lstm_time:", lstm_time
+        print "lstm_time:", lstm_time, "user_time:", user_time
         result["lstm_accuracy"] =  linear_mark(LSTM_LOSS_THRESHOLD, student_lstm_loss)
             
         result["lstm_time"] = linear_mark(LSTM_TIME_THRESHOLD, lstm_time)
